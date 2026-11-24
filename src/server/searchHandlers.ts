@@ -5,6 +5,7 @@ import type { SearchCase, SearchResponse } from "../types";
 import { compilePattern, SearchPatternError } from "../core/search";
 import { collectSides, readerFor } from "../core/searchCollect";
 import { searchDiffFiles } from "../core/searchDiff";
+import { searchRepo } from "../core/searchRepo";
 import { runSearchInWorker, SearchBusyError, SearchTimeoutError, SEARCH_TOTAL_BUDGET_MS, toWorkerRequest, withSearchSlot } from "../core/searchRunner";
 import type { ServerContext } from "./handlers";
 import { searchSource } from "./searchSource";
@@ -39,7 +40,12 @@ export async function handleGetSearch(ctx: ServerContext, url: URL): Promise<Res
   if (!CASE_MODES.includes(caseParam as SearchCase)) return apiError("case must be smart, sensitive or insensitive", 400);
   const caseMode = caseParam as SearchCase;
   const isRegex = url.searchParams.get("regex") === "1";
+  const scope = url.searchParams.get("scope") === "repo" ? "repo" : "diff";
   try {
+    if (scope === "repo") {
+      const diffPaths = new Set(ctx.diff.files.map((f) => f.path));
+      return json(searchRepo(ctx.cwd, ctx.newRef, diffPaths, query, isRegex, caseMode));
+    }
     const pattern = compilePattern(query, isRegex, caseMode);
     return json(isRegex ? await searchInWorker(ctx, query, caseMode) : searchInProcess(ctx, pattern));
   } catch (error) {

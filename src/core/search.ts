@@ -53,7 +53,7 @@ const splitsPair = (text: string, index: number) => {
 };
 
 // the line cut to MAX_PREVIEW_CHARS around its first match, with ranges shifted into that window.
-function windowed(line: string, ranges: [number, number][]): Pick<SearchHit, "preview" | "ranges"> {
+export function windowed(line: string, ranges: [number, number][]): Pick<SearchHit, "preview" | "ranges"> {
   if (line.length <= MAX_PREVIEW_CHARS) return { preview: line, ranges };
   const [first, firstEnd] = ranges[0]!;
   const slack = Math.max(0, MAX_PREVIEW_CHARS - (firstEnd - first));
@@ -67,7 +67,7 @@ function windowed(line: string, ranges: [number, number][]): Pick<SearchHit, "pr
   return { preview: line.slice(start, end), ranges: shifted };
 }
 
-function matchRanges(regex: RegExp, line: string): [number, number][] {
+export function matchRanges(regex: RegExp, line: string): [number, number][] {
   const ranges: [number, number][] = [];
   regex.lastIndex = 0;
   for (let match = regex.exec(line); match && ranges.length < MAX_RANGES_PER_LINE; match = regex.exec(line)) {

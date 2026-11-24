@@ -23,6 +23,7 @@ import { handleLspReferences } from "./lspReferences";
 import { handleGetLspSymbols } from "./lspSymbols";
 import { handleGetLspFile } from "./lspFile";
 import { handleSessionStop } from "./sessionHandlers";
+import { handleGetHistory, handlePostTarget } from "./historyHandlers";
 import { handlePresence } from "./presence";
 import { handleGetSearch } from "./searchHandlers";
 import { apiError } from "./respond";
@@ -43,7 +44,8 @@ function route(ctx: ServerContext, req: Request): Response | Promise<Response> {
   const { method } = req;
 
   if (method === "GET") {
-    if (pathname === "/api/diff") return handleGetDiff(ctx);
+    if (pathname === "/api/diff") return handleGetDiff(ctx, new URL(req.url), req);
+    if (pathname === "/api/history") return handleGetHistory(ctx, new URL(req.url));
     if (pathname === "/api/comments") return handleGetComments(ctx);
     if (pathname === "/api/compile") return handleGetCompile(ctx, new URL(req.url));
     if (pathname === "/api/update") return handleGetUpdate(ctx);
@@ -64,6 +66,7 @@ function route(ctx: ServerContext, req: Request): Response | Promise<Response> {
   }
 
   if (method === "POST") {
+    if (pathname === "/api/target") return handlePostTarget(ctx, req, new URL(req.url));
     if (pathname === "/api/comments") return handlePostComments(ctx, req);
     if (pathname === "/api/viewed") return handlePostViewed(ctx, req);
     if (pathname === "/api/state") return handlePostState(req);

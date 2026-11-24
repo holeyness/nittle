@@ -10,7 +10,7 @@ import { compileReviewPrompt } from "../core/promptCompiler";
 import { parseDiff } from "../core/diffParser";
 import { badgeUpdateStatus } from "../core/updateNotice";
 import { scanProject } from "../core/projectScan";
-import { collectDiff } from "../utils/git";
+import { collectDiff, FULL_FILE_CONTEXT } from "../utils/git";
 import { apiError, json } from "./respond";
 import { readReviewRecord, updateReviewRecord } from "../core/reviewRecords";
 import { mergeReviewerComments } from "../core/commentMerge";
@@ -29,6 +29,8 @@ export interface ServerContext {
   mode?: "diff" | "browse"; // browse re-scans the codebase on refresh instead of re-diffing
   scope?: string; // browse path scope, reused on refresh
   served: boolean; // true once the launch-computed diff has been handed to the client
+  activeSpec?: string; // current ref spec (updated when switching commits/branches in the UI)
+  lastFullContext?: boolean; // whether ctx.diff was built with FULL_FILE_CONTEXT
   reviewId?: string; // durable Review Record selected by the MCP/CLI integration
   host: SessionHost; // which integration launched this server; read by /api/session/stop
   sessionId?: string; // this server's session registry id; set by reviewLaunch, checked by /api/session/stop
@@ -58,18 +60,23 @@ function loadOrInit(ctx: ServerContext): ReviewFile {
 
 // re-runs git diff so the view reflects the repo's current state (refresh / live review),
 // keeping the last good diff if git errors transiently. the first call reuses the diff already
-// computed at launch — no point running git twice for the initial page load.
-export function handleGetDiff(ctx: ServerContext): Response {
-  if (!ctx.served) {
+// computed at launch when the requested context mode matches — no point running git twice.
+export function handleGetDiff(ctx: ServerContext, url?: URL, req?: Request): Response {
+  const full = url?.searchParams.get("full") === "1" || req?.headers.get("x-nittle-full-file") === "1";
+  if (!ctx.served && !full) {
     ctx.served = true;
+    ctx.lastFullContext = false;
     return json(ctx.diff);
   }
+  ctx.served = true;
   try {
+    const contextLines = full ? FULL_FILE_CONTEXT : undefined;
     const fresh =
       ctx.mode === "browse"
         ? scanProject(ctx.cwd, ctx.scope)
-        : { ...parseDiff(collectDiff(ctx.diffArgs, ctx.cwd, ctx.includeUntracked, false), ctx.diff.ref), meta: ctx.meta };
+        : { ...parseDiff(collectDiff(ctx.diffArgs, ctx.cwd, ctx.includeUntracked, false, contextLines), ctx.diff.ref), meta: ctx.meta };
     ctx.diff = excludeReviewFile(fresh, false);
+    ctx.lastFullContext = full;
     ctx.diffGeneration = (ctx.diffGeneration ?? 0) + 1;
   } catch {
     // keep the previous diff

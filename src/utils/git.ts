@@ -74,10 +74,22 @@ function untrackedReviewFile(cwd: string): string[] {
   return runGit(["ls-files", "--", REVIEW_FILE], cwd).trim() ? [] : [REVIEW_FILE];
 }
 
+export const FULL_FILE_CONTEXT = 999999;
+
 // runs the planned diff; in working-tree mode also appends synthetic "new file" diffs for
 // untracked files (which `git diff` omits by design) so they show up and are commentable.
-export function collectDiff(diffArgs: string[], cwd: string, includeUntracked: boolean, showReview = false): string {
-  let raw = runGit(diffArgs, cwd);
+export function collectDiff(
+  diffArgs: string[],
+  cwd: string,
+  includeUntracked: boolean,
+  showReview = false,
+  contextLines?: number,
+): string {
+  const args =
+    contextLines !== undefined && diffArgs[0] === "diff"
+      ? [diffArgs[0], `-U${contextLines}`, ...diffArgs.slice(1)]
+      : diffArgs;
+  let raw = runGit(args, cwd);
   if (!includeUntracked) return raw;
   const untracked = runGit(["ls-files", "--others", "--exclude-standard"], cwd)
     .split("\n")
@@ -127,6 +139,27 @@ export function resolveRef(spec: string | undefined, cwd: string): DiffPlan {
   }
 
   if (isCommitSpec(spec)) return resolveCommit(spec, cwd);
+
+  // three-dot range (merge-base diff): what `to` added since it forked from `from`
+  if (spec.includes("...")) {
+    const threeParts = spec.split("...");
+    if (threeParts.length === 2) {
+      const [from, to] = threeParts as [string, string];
+      const resolvedFrom = from ? resolveAvailableRef(from, cwd) : "HEAD";
+      if (!resolvedFrom) throw new Error(`unknown ref: ${from}`);
+      const resolvedTo = to ? resolveAvailableRef(to, cwd) : "HEAD";
+      if (!resolvedTo) throw new Error(`unknown ref: ${to}`);
+      return {
+        diffArgs: ["diff", `${resolvedFrom}...${resolvedTo}`],
+        refLabel: `${resolvedTo} → ${resolvedFrom}`,
+        newRef: resolvedTo,
+        mode: "branch",
+        source: resolvedTo,
+        target: resolvedFrom,
+        includeUntracked: false,
+      };
+    }
+  }
 
   const parts = spec.split("..");
   if (parts.length === 2) {

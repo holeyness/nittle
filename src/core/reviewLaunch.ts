@@ -63,7 +63,7 @@ export function launchReview(input: ReviewLaunchInput): ReviewLaunch {
   const assets = resolveClientAssets(input.productRoot);
   const sessionId = randomUUID();
   const lsp = input.lspPool ?? createLspPool(cwd, input.lsp !== false, input.lspOverrides);
-  const ctx: ServerContext = { ...loaded, cwd, assets, productRoot: input.productRoot, served: false, reviewId: review.id, host: input.host, sessionId, presence: createPresence(), lsp };
+  const ctx: ServerContext = { ...loaded, cwd, assets, productRoot: input.productRoot, served: false, activeSpec: storedSpec, reviewId: review.id, host: input.host, sessionId, presence: createPresence(), lsp };
   const server = createServer(ctx, input.port ?? 0);
   const port = server.port ?? 0;
   const origin = `http://${LOOPBACK_BIND_HOST}:${port}`;

@@ -490,3 +490,47 @@ export interface LspWorkspaceSymbol extends LspLocation {
 export interface LspWorkspaceSymbolsResponse { symbols: LspWorkspaceSymbol[]; total: number; truncated: boolean }
 
 export interface LspFileResponse extends LspLocation { content: string }
+
+// ── commit history & stacked branches ───────────────────────────────────────
+
+export type CommitRefKind = "head" | "branch" | "remote" | "tag";
+
+export interface CommitRefBadge {
+  name: string;
+  kind: CommitRefKind;
+}
+
+export interface HistoryCommit {
+  hash: string;
+  shortHash: string;
+  parents: string[];
+  author: string;
+  relativeDate: string;
+  subject: string;
+  refs: CommitRefBadge[];
+  onStack: boolean;
+}
+
+export interface StackBranch {
+  name: string;
+  hash: string;
+  shortHash: string;
+  parentRef: string; // parent branch or base ref to diff against
+  commitCount: number;
+  isHead: boolean;
+}
+
+export interface HistoryResponse {
+  head: string | null;
+  currentBranch: string;
+  defaultBranch: string | null;
+  hasWorkingChanges: boolean;
+  activeSpec: string | null;
+  stack: StackBranch[];
+  commits: HistoryCommit[];
+}
+
+export interface SwitchTargetRequest {
+  spec: string;
+}
+
