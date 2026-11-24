@@ -1,69 +1,73 @@
-// whole-repository text search via `git grep`, respecting .gitignore and the reviewed revision.
+// async whole-repository text search via `git grep -z`, respecting .gitignore and the active revision.
 
 import type { SearchCase, SearchHit, SearchResponse } from "../types";
-import { compilePattern, matchRanges, windowed } from "./search";
+import { compilePattern, isCaseInsensitive, matchRanges, windowed } from "./search";
 
 const MAX_REPO_RESULTS = 200;
 const GIT_GREP_TIMEOUT_MS = 4000;
 const MAX_LINE_BYTES = 8000;
 
-function isCaseInsensitive(query: string, caseMode: SearchCase): boolean {
-  if (caseMode === "insensitive") return true;
-  if (caseMode === "sensitive") return false;
-  return !/[A-Z]/.test(query);
-}
-
-// parses one `git grep -n --no-color -I` line; ref-prefixed lines look like `<ref>:<path>:<line>:<text>`.
-function parseGrepLine(raw: string, hasRefPrefix: boolean): { path: string; line: number; text: string } | null {
-  let rest = raw;
-  if (hasRefPrefix) {
-    const colon = rest.indexOf(":");
-    if (colon < 0) return null;
-    rest = rest.slice(colon + 1);
+// parses one `git grep -z -n --no-color -I` line:
+// without ref: `<path>\0<line>\0<text>`; with ref: `<ref>:<path>\0<line>\0<text>`.
+function parseNullGrepLine(raw: string, rev: string | null): { path: string; line: number; text: string } | null {
+  const parts = raw.split("\0");
+  let path = parts[0];
+  const lineStr = parts[1];
+  if (!path || !lineStr) return null;
+  if (rev !== null) {
+    const prefix = `${rev}:`;
+    if (!path.startsWith(prefix)) return null;
+    path = path.slice(prefix.length);
   }
-  const first = rest.indexOf(":");
-  if (first <= 0) return null;
-  const second = rest.indexOf(":", first + 1);
-  if (second <= first + 1) return null;
-  const path = rest.slice(0, first);
-  const line = Number(rest.slice(first + 1, second));
-  if (!Number.isInteger(line) || line < 1) return null;
-  const text = rest.slice(second + 1).replace(/\r$/, "");
+  const line = Number(lineStr);
+  if (!path || !Number.isInteger(line) || line < 1) return null;
+  const text = parts.slice(2).join("\0").replace(/\r$/, "");
   return { path, line, text };
 }
 
-export function searchRepo(
+export async function searchRepo(
   cwd: string,
   newRef: string | null,
   diffPaths: Set<string>,
   query: string,
   isRegex: boolean,
   caseMode: SearchCase,
-): SearchResponse {
+): Promise<SearchResponse> {
   // validate pattern with the same compiler so bad regex errors stay consistent
   const pattern = compilePattern(query, isRegex, caseMode);
 
-  const args = ["grep", "-n", "--no-color", "-I", "--max-count", "30"];
-  if (isCaseInsensitive(query, caseMode)) args.push("-i");
+  const args = ["grep", "-z", "-n", "--no-color", "-I", "--max-count", "30"];
+  if (isCaseInsensitive(query, caseMode, isRegex)) args.push("-i");
   args.push(isRegex ? "-E" : "-F");
-  args.push("-e", query);
 
+  const isStaged = newRef === "";
   const rev = newRef && newRef.trim() ? newRef.trim() : null;
+  if (isStaged) args.push("--cached");
+  args.push("-e", query);
   if (rev) args.push(rev);
 
-  const proc = Bun.spawnSync(["git", ...args], {
-    cwd,
-    timeout: GIT_GREP_TIMEOUT_MS,
-    maxBuffer: 8 * 1024 * 1024,
-  });
+  const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const timer = setTimeout(() => {
+    try { proc.kill(); } catch { /* already exited */ }
+  }, GIT_GREP_TIMEOUT_MS);
 
-  // git grep exits 1 when there are zero matches (not an error)
-  if (proc.exitCode !== 0 && proc.exitCode !== 1) {
-    const stderr = proc.stderr.toString().trim();
-    throw new Error(stderr || "repository search failed");
+  let stdout = "";
+  let stderr = "";
+  let exitCode = 0;
+  try {
+    [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 
-  const stdout = proc.stdout.toString();
+  // git grep exits 1 when there are zero matches (not an error)
+  if (exitCode !== 0 && exitCode !== 1) {
+    throw new Error(stderr.trim() || "repository search failed");
+  }
   if (!stdout) return { results: [], truncated: false };
 
   const inDiff: SearchHit[] = [];
@@ -72,27 +76,28 @@ export function searchRepo(
 
   for (const raw of stdout.split("\n")) {
     if (!raw) continue;
-    const parsed = parseGrepLine(raw, rev !== null);
+    const parsed = parseNullGrepLine(raw, rev);
     if (!parsed) continue;
+    const isInDiff = diffPaths.has(parsed.path);
+    // keep collecting inDiff hits even after non-diff hits fill the cap
+    if (!isInDiff && other.length >= MAX_REPO_RESULTS) {
+      truncated = true;
+      continue;
+    }
+    if (isInDiff && inDiff.length >= MAX_REPO_RESULTS) {
+      truncated = true;
+      continue;
+    }
     const text = parsed.text.length > MAX_LINE_BYTES ? parsed.text.slice(0, MAX_LINE_BYTES) : parsed.text;
     const matches = matchRanges(pattern.regex, text);
     const { preview, ranges } = matches.length > 0 ? windowed(text, matches) : { preview: text.slice(0, 200), ranges: [] };
     const hit: SearchHit = { path: parsed.path, side: "new", line: parsed.line, preview, ranges };
-
-    if (diffPaths.has(parsed.path)) {
-      inDiff.push(hit);
-    } else {
-      other.push(hit);
-    }
-    if (inDiff.length + other.length >= MAX_REPO_RESULTS + 50) {
-      truncated = true;
-      break;
-    }
+    if (isInDiff) inDiff.push(hit);
+    else other.push(hit);
   }
 
   const combined = [...inDiff, ...other];
   if (combined.length > MAX_REPO_RESULTS) {
-    truncated = true;
     return { results: combined.slice(0, MAX_REPO_RESULTS), truncated: true };
   }
   return { results: combined, truncated };

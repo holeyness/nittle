@@ -1,11 +1,9 @@
 // commit history & interactive target switching for PyCharm-style multi-commit review.
 
 import type { SwitchTargetRequest } from "../types";
-import type { ServerContext } from "./handlers";
+import { isFullContextRequest, type ServerContext } from "./handlers";
 import { loadReviewTarget } from "../core/reviewTarget";
-import { parseDiff } from "../core/diffParser";
-import { excludeReviewFile } from "../core/reviewFilter";
-import { collectDiff, FULL_FILE_CONTEXT } from "../utils/git";
+import { FULL_FILE_CONTEXT } from "../utils/git";
 import { readGitHistory } from "../utils/gitHistory";
 import { apiError, json } from "./respond";
 
@@ -25,20 +23,16 @@ export async function handlePostTarget(ctx: ServerContext, req: Request, url: UR
   const spec = typeof (body as Partial<SwitchTargetRequest>)?.spec === "string" ? (body as SwitchTargetRequest).spec.trim() : "";
   if (!spec) return apiError("spec must be a non-empty string", 400);
 
-  const full = url.searchParams.get("full") === "1" || req.headers.get("x-nittle-full-file") === "1";
+  const contextLines = isFullContextRequest(url, req) ? FULL_FILE_CONTEXT : undefined;
   try {
-    const loaded = loadReviewTarget(ctx.cwd, spec, undefined, false);
+    const loaded = loadReviewTarget(ctx.cwd, spec, undefined, false, contextLines);
     // preserve PR metadata in the top bar while browsing commits inside a PR review
     const existingPr = ctx.meta?.pr;
-    if (existingPr && loaded.meta) loaded.meta = { ...loaded.meta, pr: existingPr };
-    const diff =
-      full && loaded.mode !== "browse"
-        ? excludeReviewFile(
-            { ...parseDiff(collectDiff(loaded.diffArgs, ctx.cwd, loaded.includeUntracked, false, FULL_FILE_CONTEXT), loaded.diff.ref), meta: loaded.meta },
-            false,
-          )
-        : { ...loaded.diff, meta: loaded.meta };
-    ctx.diff = diff;
+    if (existingPr && loaded.meta) {
+      loaded.meta = { ...loaded.meta, pr: existingPr };
+      loaded.diff = { ...loaded.diff, meta: loaded.meta };
+    }
+    ctx.diff = loaded.diff;
     ctx.diffArgs = loaded.diffArgs;
     ctx.newRef = loaded.newRef;
     ctx.includeUntracked = loaded.includeUntracked;
@@ -46,7 +40,6 @@ export async function handlePostTarget(ctx: ServerContext, req: Request, url: UR
     ctx.mode = loaded.mode;
     ctx.scope = loaded.scope;
     ctx.activeSpec = loaded.pinnedSpec ?? spec;
-    ctx.lastFullContext = full;
     ctx.served = true;
     ctx.diffGeneration = (ctx.diffGeneration ?? 0) + 1;
     return json(ctx.diff);

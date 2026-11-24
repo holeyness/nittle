@@ -22,7 +22,7 @@ export interface SearchPattern {
 }
 
 // smart case: insensitive unless the query itself has an uppercase letter (regex escapes like \S don't count)
-function isCaseInsensitive(query: string, mode: SearchCase, isRegex: boolean): boolean {
+export function isCaseInsensitive(query: string, mode: SearchCase, isRegex: boolean): boolean {
   if (mode !== "smart") return mode === "insensitive";
   const letters = isRegex ? query.replace(/\\./g, "") : query;
   return !/\p{Lu}/u.test(letters);

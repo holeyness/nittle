@@ -7,10 +7,10 @@ import type { LspHandle } from "../core/lsp/pool";
 import { readReview, writeReview } from "../core/reviewStore";
 import { excludeReviewFile } from "../core/reviewFilter";
 import { compileReviewPrompt } from "../core/promptCompiler";
-import { parseDiff } from "../core/diffParser";
 import { badgeUpdateStatus } from "../core/updateNotice";
 import { scanProject } from "../core/projectScan";
-import { collectDiff, FULL_FILE_CONTEXT } from "../utils/git";
+import { buildDiff } from "../core/reviewTarget";
+import { FULL_FILE_CONTEXT } from "../utils/git";
 import { apiError, json } from "./respond";
 import { readReviewRecord, updateReviewRecord } from "../core/reviewRecords";
 import { mergeReviewerComments } from "../core/commentMerge";
@@ -32,7 +32,6 @@ export interface ServerContext {
   activeSpec?: string; // current ref spec (updated when switching commits/branches in the UI)
   historyTipRef?: string | null; // stable tip ref for the commit sidebar (e.g. a PR ref when launched via `nittle pr`)
   historyBaseRef?: string | null; // stable base ref for stack/PR commit highlighting
-  lastFullContext?: boolean; // whether ctx.diff was built with FULL_FILE_CONTEXT
   reviewId?: string; // durable Review Record selected by the MCP/CLI integration
   host: SessionHost; // which integration launched this server; read by /api/session/stop
   sessionId?: string; // this server's session registry id; set by reviewLaunch, checked by /api/session/stop
@@ -60,25 +59,26 @@ function loadOrInit(ctx: ServerContext): ReviewFile {
   };
 }
 
+export function isFullContextRequest(url?: URL, req?: Request): boolean {
+  return url?.searchParams.get("full") === "1" || req?.headers.get("x-nittle-full-file") === "1";
+}
+
 // re-runs git diff so the view reflects the repo's current state (refresh / live review),
 // keeping the last good diff if git errors transiently. the first call reuses the diff already
 // computed at launch when the requested context mode matches — no point running git twice.
 export function handleGetDiff(ctx: ServerContext, url?: URL, req?: Request): Response {
-  const full = url?.searchParams.get("full") === "1" || req?.headers.get("x-nittle-full-file") === "1";
+  const full = isFullContextRequest(url, req);
   if (!ctx.served && !full) {
     ctx.served = true;
-    ctx.lastFullContext = false;
     return json(ctx.diff);
   }
   ctx.served = true;
   try {
     const contextLines = full ? FULL_FILE_CONTEXT : undefined;
-    const fresh =
+    ctx.diff =
       ctx.mode === "browse"
-        ? scanProject(ctx.cwd, ctx.scope)
-        : { ...parseDiff(collectDiff(ctx.diffArgs, ctx.cwd, ctx.includeUntracked, false, contextLines), ctx.diff.ref), meta: ctx.meta };
-    ctx.diff = excludeReviewFile(fresh, false);
-    ctx.lastFullContext = full;
+        ? excludeReviewFile(scanProject(ctx.cwd, ctx.scope), false)
+        : buildDiff(ctx.diffArgs, ctx.cwd, ctx.includeUntracked, ctx.diff.ref, ctx.meta, false, contextLines);
     ctx.diffGeneration = (ctx.diffGeneration ?? 0) + 1;
   } catch {
     // keep the previous diff

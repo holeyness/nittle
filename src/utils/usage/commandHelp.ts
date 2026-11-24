@@ -65,7 +65,7 @@ export const COMMAND_HELP: Record<HelpTopic, CommandHelp> = {
     summary: "review a GitHub pull request locally with full LSP (read-only fetch)",
     usage: [`${n} pr [number|url] [options]`],
     details: [
-      "Fetches the PR head into a local ref (refs/nittle/pr-<N>) via git and gh without",
+      "Fetches the PR head and fresh remote base into local refs (refs/nittle/pr-<N>{,-base})",
       "changing your checked-out branch or working tree, then opens a three-dot merge-base",
       "diff with full LSP navigation, commit history, and whole-repo search.",
     ],

@@ -44,7 +44,7 @@ export async function handleGetSearch(ctx: ServerContext, url: URL): Promise<Res
   try {
     if (scope === "repo") {
       const diffPaths = new Set(ctx.diff.files.map((f) => f.path));
-      return json(searchRepo(ctx.cwd, ctx.newRef, diffPaths, query, isRegex, caseMode));
+      return json(await searchRepo(ctx.cwd, ctx.newRef, diffPaths, query, isRegex, caseMode));
     }
     const pattern = compilePattern(query, isRegex, caseMode);
     return json(isRegex ? await searchInWorker(ctx, query, caseMode) : searchInProcess(ctx, pattern));

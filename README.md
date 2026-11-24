@@ -86,7 +86,8 @@ Reviews live outside the repo in `~/.nittle/reviews/<id>/review.json`, and nittl
   ```sh
   bun install --registry https://registry.npmjs.org
   bun run build:binary
-  cp dist/nittle ~/.nittle/bin/nittle && ln -sf ~/.nittle/bin/nittle ~/.local/bin/nittle
+  cp dist/nittle ~/.nittle/bin/nittle.tmp && mv -f ~/.nittle/bin/nittle.tmp ~/.nittle/bin/nittle
+  ln -sf ~/.nittle/bin/nittle ~/.local/bin/nittle
   ```
 
 ## Commands
