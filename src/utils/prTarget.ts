@@ -29,10 +29,6 @@ function runGh(args: string[], cwd: string): string {
   return proc.stdout.toString();
 }
 
-function hasMergeBase(base: string, head: string, cwd: string): boolean {
-  return Bun.spawnSync(["git", "merge-base", base, head], { cwd }).exitCode === 0;
-}
-
 export function resolvePrTarget(prArg: string | undefined, cwd: string): ResolvedPrTarget {
   const viewArgs = [
     "pr",
@@ -48,13 +44,20 @@ export function resolvePrTarget(prArg: string | undefined, cwd: string): Resolve
   }
 
   const localPrRef = `refs/nittle/pr-${parsed.number}`;
-  // force-fetch the PR head into a dedicated ref; never touches HEAD or the working tree
-  runGit(["fetch", "--quiet", "--force", "origin", `refs/pull/${parsed.number}/head:${localPrRef}`], cwd);
-
-  const baseRef = `origin/${parsed.baseRefName}`;
-  if (!hasMergeBase(baseRef, localPrRef, cwd)) {
-    runGit(["fetch", "--quiet", "origin", `${parsed.baseRefName}:refs/remotes/${baseRef}`], cwd);
-  }
+  const localBaseRef = `refs/nittle/pr-${parsed.number}-base`;
+  // force-fetch both the PR head and the fresh remote base branch into dedicated refs;
+  // never touches HEAD, the working tree, or origin/<base> (and avoids stale origin/main drift).
+  runGit(
+    [
+      "fetch",
+      "--quiet",
+      "--force",
+      "origin",
+      `refs/pull/${parsed.number}/head:${localPrRef}`,
+      `refs/heads/${parsed.baseRefName}:${localBaseRef}`,
+    ],
+    cwd,
+  );
 
   const pr: PrInfo = {
     number: parsed.number,
@@ -67,7 +70,7 @@ export function resolvePrTarget(prArg: string | undefined, cwd: string): Resolve
   };
 
   return {
-    spec: `${baseRef}...${localPrRef}`,
+    spec: `${localBaseRef}...${localPrRef}`,
     refLabel: `PR #${pr.number} · ${pr.headRef} → ${pr.baseRef}`,
     pr,
   };
