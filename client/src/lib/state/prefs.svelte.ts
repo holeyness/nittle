@@ -2,10 +2,9 @@
 // keys are namespaced + migrated by prefs-storage; this store owns the document.theme
 // side effect and the theme-value migration (claude -> light, claude-dark -> dark).
 
-import type { IgnoreWhitespace } from "$types";
 import { readMigrated, writeKey, type StorageLike } from "./prefs-storage";
 import { DEFAULT_SPLIT_RATIO, clampSplitRatio } from "$lib/diff/splitRatio";
-import { isIgnoreWhitespace } from "$lib/diff/whitespace";
+import { isIgnoreWhitespace, type IgnoreWhitespace } from "$lib/diff/whitespace";
 
 export type Theme = "light" | "dark";
 export type FileView = "all" | "single";

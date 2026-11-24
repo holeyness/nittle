@@ -2,7 +2,6 @@
   import Check from "@lucide/svelte/icons/check";
   import NumberFlow from "@number-flow/svelte";
   import { fileAnchorId, type TreeFile } from "$lib/diff/tree";
-  import { isWhitespaceOnlyResult } from "$lib/diff/whitespace";
   import { getAppState } from "$lib/state/context";
   import { changeBadge } from "$lib/format";
   import { worstFlagBand, BAND_DOT, BAND_LABEL } from "$lib/scorecard/bands";
@@ -55,7 +54,7 @@
           {#if file.additions}<span class="text-add-text">+{file.additions}</span>{/if}
           {#if file.deletions}<span class="text-del-text"> −{file.deletions}</span>{/if}
         </span>
-      {:else if isWhitespaceOnlyResult(file, prefs.ignoreWhitespace)}
+      {:else if file.whitespaceOnly}
         <span class="rounded bg-surface-2 px-1 font-mono text-[9px] text-dim" title="Only whitespace differences">ws</span>
       {/if}
     </span>

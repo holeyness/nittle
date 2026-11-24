@@ -7,8 +7,6 @@ export type ChangeType = "added" | "modified" | "deleted" | "renamed";
 
 export type LineType = "context" | "addition" | "deletion";
 
-export type IgnoreWhitespace = "none" | "trim" | "all" | "all-and-empty";
-
 export interface DiffLine {
   type: LineType;
   oldLine: number | null; // null on additions (or new-only ignored blank lines)

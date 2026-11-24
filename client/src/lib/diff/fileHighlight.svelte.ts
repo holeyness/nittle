@@ -1,7 +1,7 @@
 import type { DiffFile, DiffLine } from "$types";
 import { getFile } from "$lib/api/meta";
 import { escapeHtml } from "./html";
-import { highlightFileSides, needsFileText, type SideLineHtml } from "./highlight";
+import { highlightFile, needsFileText, type SideLineHtml } from "./highlight";
 
 // new-side text for seeding hunk context; null when not needed or unavailable (highlighting
 // still works, just without the file's leading context).
@@ -18,7 +18,7 @@ export function createFileHighlight(current: () => DiffFile): (line: DiffLine, s
     const file = current();
     const controller = new AbortController();
     loadText(file, controller.signal)
-      .then((text) => highlightFileSides(file, text))
+      .then((text) => highlightFile(file, text))
       .then((sides) => {
         if (!controller.signal.aborted) result = { file, sides };
       })

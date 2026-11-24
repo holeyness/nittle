@@ -1,7 +1,8 @@
 // intra-line word diff: pairs deletion/addition runs and computes the changed char range
 // inside each modified line pair. pure — no dom, unit-testable.
 
-import type { DiffLine, IgnoreWhitespace } from "$types";
+import type { DiffLine } from "$types";
+import type { IgnoreWhitespace } from "./whitespace";
 
 export interface SplitRow {
   left: DiffLine | null;
@@ -46,30 +47,25 @@ interface Token {
   text: string;
   start: number;
   end: number;
-  isWs: boolean;
 }
 
 const TOKEN = /\w+|\s+|[^\w\s]/g;
+const NON_WS_TOKEN = /\w+|[^\w\s]/g;
 const IS_WS = /^\s+$/;
 
 function tokenize(s: string, ignoreWhitespace: IgnoreWhitespace): Token[] {
-  const raw: Token[] = [];
-  for (const m of s.matchAll(TOKEN)) {
-    const text = m[0];
+  const pattern = ignoreWhitespace === "all" || ignoreWhitespace === "all-and-empty" ? NON_WS_TOKEN : TOKEN;
+  const tokens: Token[] = [];
+  for (const m of s.matchAll(pattern)) {
     const start = m.index ?? 0;
-    raw.push({ text, start, end: start + text.length, isWs: IS_WS.test(text) });
+    tokens.push({ text: m[0], start, end: start + m[0].length });
   }
   if (ignoreWhitespace === "trim") {
-    let lo = 0;
-    let hi = raw.length;
-    while (lo < hi && raw[lo]!.isWs) lo++;
-    while (hi > lo && raw[hi - 1]!.isWs) hi--;
-    return raw.slice(lo, hi);
+    const lo = tokens.length > 0 && IS_WS.test(tokens[0]!.text) ? 1 : 0;
+    const hi = tokens.length > lo && IS_WS.test(tokens[tokens.length - 1]!.text) ? tokens.length - 1 : tokens.length;
+    return tokens.slice(lo, hi);
   }
-  if (ignoreWhitespace === "all" || ignoreWhitespace === "all-and-empty") {
-    return raw.filter((t) => !t.isWs);
-  }
-  return raw;
+  return tokens;
 }
 
 function tokenSpan(tokens: Token[], pre: number, end: number): CharRange {

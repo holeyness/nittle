@@ -19,7 +19,7 @@
   } from "$lib/diff/fileMode";
   import { movedLookup } from "$lib/diff/movedLines";
   import { PLAIN_ANNOTATIONS, type DiffAnnotations } from "$lib/diff/annotations";
-  import { isWhitespaceOnlyResult, whitespaceEmptyBanner } from "$lib/diff/whitespace";
+  import { whitespaceEmptyBanner } from "$lib/diff/whitespace";
   import { createInterdiff } from "$lib/diff/interdiff.svelte";
   import { nearViewport } from "$lib/actions";
   import { FILE_LEVEL } from "$lib/state/cursorSteps";
@@ -50,7 +50,7 @@
   const noise = $derived(fileAnalysis?.noise ?? null);
   const changedSinceReview = $derived(fileAnalysis?.changedSinceReview === true);
   const interdiffOn = $derived(sinceReview && changedSinceReview);
-  const interdiff = createInterdiff(() => ({ path: file.path, enabled: interdiffOn, version: file }));
+  const interdiff = createInterdiff(() => ({ path: file.path, enabled: interdiffOn, version: diff.state }));
   const interdiffState = $derived(interdiff.state);
   // search matches the real diff, so it steps aside while this file shows the interdiff
   $effect(() => {
@@ -72,7 +72,7 @@
           }
         : PLAIN_ANNOTATIONS,
   );
-  const whitespaceOnlyNotice = $derived(!interdiffOn && isWhitespaceOnlyResult(file, prefs.ignoreWhitespace));
+  const whitespaceOnlyNotice = $derived(!interdiffOn && file.whitespaceOnly === true);
 
   const isMd = $derived(canPreviewMarkdown(file) && !interdiffOn);
 
@@ -218,40 +218,36 @@
       <MarkdownPreview {file} />
     {:else if file.binary}
       <p class="px-4 py-3 text-sm text-muted">Binary file — no textual diff.</p>
-    {:else if shown.hunks.length === 0}
-      {#if whitespaceOnlyNotice}
-        <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-muted" data-whitespace-only-banner>
-          <span>{whitespaceEmptyBanner(prefs.ignoreWhitespace)}</span>
-          <button
-            type="button"
-            class="rounded border border-border bg-surface-2 px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent"
-            onclick={() => prefs.setIgnoreWhitespace("none")}
-          >Show all differences</button>
-        </div>
-      {:else}
-        <p class="px-4 py-3 text-sm text-dim">No changes to display.</p>
-      {/if}
-    {:else if giant && !loaded}
-      <div class="flex items-center gap-3 px-4 py-3 text-sm text-muted">
-        <span>Large diff — hidden to keep things fast.</span>
-        <button class="rounded border border-border px-2 py-1 text-xs text-text hover:bg-surface-2" onclick={() => (loaded = true)}>Load diff</button>
-      </div>
-    {:else if !giant && !effectiveMounted}
-      <div style="height:{estimatedHeight(shown)}px" use:nearViewport={() => (mounted = true)}></div>
     {:else}
       {#if whitespaceOnlyNotice}
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-divider bg-surface-2/60 px-4 py-1.5 text-xs text-muted" data-whitespace-only-banner>
+        <div
+          class="flex flex-wrap items-center justify-between gap-2 px-4 text-muted {shown.hunks.length > 0 ? 'border-b border-divider bg-surface-2/60 py-1.5 text-xs' : 'py-3 text-sm'}"
+          data-whitespace-only-banner
+        >
           <span>{whitespaceEmptyBanner(prefs.ignoreWhitespace)}</span>
           <button
             type="button"
-            class="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent"
+            class="rounded border border-border {shown.hunks.length > 0 ? 'bg-surface' : 'bg-surface-2'} px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent"
             onclick={() => prefs.setIgnoreWhitespace("none")}
           >Show all differences</button>
         </div>
       {/if}
-      <div class="diff-scroll {useSplit ? 'split-scroll' : 'overflow-x-auto'} {prefs.wrap ? 'wrap' : ''}" use:revealRows>
-        {#if useSplit}<SplitDiff file={shown} {annotations} />{:else}<UnifiedDiff file={shown} {annotations} />{/if}
-      </div>
+      {#if shown.hunks.length === 0}
+        {#if !whitespaceOnlyNotice}
+          <p class="px-4 py-3 text-sm text-dim">No changes to display.</p>
+        {/if}
+      {:else if giant && !loaded}
+        <div class="flex items-center gap-3 px-4 py-3 text-sm text-muted">
+          <span>Large diff — hidden to keep things fast.</span>
+          <button class="rounded border border-border px-2 py-1 text-xs text-text hover:bg-surface-2" onclick={() => (loaded = true)}>Load diff</button>
+        </div>
+      {:else if !giant && !effectiveMounted}
+        <div style="height:{estimatedHeight(shown)}px" use:nearViewport={() => (mounted = true)}></div>
+      {:else}
+        <div class="diff-scroll {useSplit ? 'split-scroll' : 'overflow-x-auto'} {prefs.wrap ? 'wrap' : ''}" use:revealRows>
+          {#if useSplit}<SplitDiff file={shown} {annotations} />{:else}<UnifiedDiff file={shown} {annotations} />{/if}
+        </div>
+      {/if}
     {/if}
 
     {#if fileLevel.length > 0 || addingFile}

@@ -1,7 +1,7 @@
-import type { DiffResult, DiffFile, DiffMeta, IgnoreWhitespace } from "$types";
+import type { DiffResult, DiffFile, DiffMeta } from "$types";
 import { getDiff, switchTarget as switchTargetApi, type DiffRequestOpts } from "$lib/api/diff";
 import { treeOrder } from "$lib/diff/tree";
-import { applyWhitespacePolicy } from "$lib/diff/whitespace";
+import { applyWhitespacePolicy, type IgnoreWhitespace } from "$lib/diff/whitespace";
 
 // diff loading state machine. load() is the initial fetch; refresh() re-fetches
 // and keeps the last good diff on failure, mirroring the server's behavior.
@@ -34,8 +34,9 @@ export function createDiffStore(deps: Deps = { getDiff, switchTarget: switchTarg
 
   const ready = $derived(state.status === "ready" ? state.diff : undefined);
   // sidebar tree order, so the diff pane and j/k walk files the way the tree lists them.
+  const ordered = $derived<DiffFile[]>(treeOrder(ready?.files ?? []));
   const files = $derived<DiffFile[]>(
-    treeOrder(applyWhitespacePolicy(ready?.files ?? [], deps.ignoreWhitespace?.() ?? "none", !(deps.full?.() ?? false))),
+    applyWhitespacePolicy(ordered, deps.ignoreWhitespace?.() ?? "none", !(deps.full?.() ?? false)),
   );
   const ref = $derived<string>(ready?.ref ?? "");
   const meta = $derived<DiffMeta | undefined>(ready?.meta);

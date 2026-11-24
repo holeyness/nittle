@@ -10,6 +10,7 @@
 // and reuses until the files, view modes or side preference change.
 
 import type { DiffFile, DiffLine } from "$types";
+import { lineText } from "$lib/anchor";
 import type { Side } from "$lib/diff/threads";
 import { pairLines } from "$lib/diff/wordDiff";
 
@@ -54,8 +55,7 @@ function stopsOfView(view: FileView, fileIndex: number, pref: Side): Stop[] {
       const side: Side = view.split ? pref : l.newLine != null ? "new" : "old";
       const line = side === "new" ? l.newLine : l.oldLine;
       if (line == null) continue;
-      const content = side === "old" && l.oldContent !== undefined ? l.oldContent : l.content;
-      out.push({ path: view.file.path, fileIndex, side, line, oldLine: l.oldLine, newLine: l.newLine, content, hunkStart });
+      out.push({ path: view.file.path, fileIndex, side, line, oldLine: l.oldLine, newLine: l.newLine, content: lineText(l, side), hunkStart });
       hunkStart = false;
     }
   }

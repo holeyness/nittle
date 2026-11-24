@@ -99,10 +99,14 @@
 
   function findFileWithChanges(fromIndex: number, step: 1 | -1): number {
     for (let i = fromIndex + step; i >= 0 && i < files.length; i += step) {
-      if (files[i]!.hunks.some((h) => h.lines.some((l) => l.type !== "context"))) return i;
+      const f = files[i]!;
+      if (f.additions > 0 || f.deletions > 0) return i;
     }
     return -1;
   }
+
+  const prevChangedFile = $derived(activeIndex > 0 ? findFileWithChanges(activeIndex, -1) : -1);
+  const nextChangedFile = $derived(activeIndex >= 0 ? findFileWithChanges(activeIndex, 1) : -1);
 
   function nextChange(): void {
     if (!activeFile) return;
@@ -119,9 +123,8 @@
         return;
       }
     }
-    const nextFileWithChanges = findFileWithChanges(activeIndex, 1);
-    if (nextFileWithChanges >= 0) {
-      selectFileByIndex(nextFileWithChanges, "first");
+    if (nextChangedFile >= 0) {
+      selectFileByIndex(nextChangedFile, "first");
     } else if (blocks.length > 0) {
       activeBlockIdx = blocks.length - 1;
       scrollToBlock(activeFile.path, blocks[blocks.length - 1]!);
@@ -149,9 +152,8 @@
         return;
       }
     }
-    const prevFileWithChanges = findFileWithChanges(activeIndex, -1);
-    if (prevFileWithChanges >= 0) {
-      selectFileByIndex(prevFileWithChanges, "last");
+    if (prevChangedFile >= 0) {
+      selectFileByIndex(prevChangedFile, "last");
     } else if (blocks.length > 0) {
       activeBlockIdx = 0;
       scrollToBlock(activeFile.path, blocks[0]!);
@@ -224,10 +226,8 @@
 
   const canPrevFile = $derived(activeIndex > 0);
   const canNextFile = $derived(activeIndex >= 0 && activeIndex < files.length - 1);
-  const hasPrevFileChanges = $derived(activeIndex > 0 && findFileWithChanges(activeIndex, -1) >= 0);
-  const hasNextFileChanges = $derived(activeIndex >= 0 && findFileWithChanges(activeIndex, 1) >= 0);
-  const canPrevChange = $derived(activeBlockIdx > 0 || hasPrevFileChanges);
-  const canNextChange = $derived((blocks.length > 0 && activeBlockIdx < blocks.length - 1) || hasNextFileChanges);
+  const canPrevChange = $derived(activeBlockIdx > 0 || prevChangedFile >= 0);
+  const canNextChange = $derived((blocks.length > 0 && activeBlockIdx < blocks.length - 1) || nextChangedFile >= 0);
   const ignoringWhitespace = $derived(prefs.ignoreWhitespace !== "none");
 </script>
 

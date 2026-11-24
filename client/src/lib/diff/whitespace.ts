@@ -1,15 +1,9 @@
 // IntelliJ-style whitespace ignore modes: pure diff transformation preserving exact
 // oldLine/newLine coordinates and both sides' original text for side-by-side rendering and LSP.
 
-import type { DiffFile, DiffHunk, DiffLine, IgnoreWhitespace } from "$types";
+import type { DiffFile, DiffHunk, DiffLine } from "$types";
 
-export interface WhitespaceOption {
-  value: IgnoreWhitespace;
-  label: string;
-  emptyBanner: string;
-}
-
-export const IGNORE_WHITESPACE_OPTIONS: readonly WhitespaceOption[] = [
+export const IGNORE_WHITESPACE_OPTIONS = [
   {
     value: "none",
     label: "Do not ignore",
@@ -31,6 +25,8 @@ export const IGNORE_WHITESPACE_OPTIONS: readonly WhitespaceOption[] = [
     emptyBanner: "Contents have differences only in whitespaces and empty lines",
   },
 ] as const;
+
+export type IgnoreWhitespace = (typeof IGNORE_WHITESPACE_OPTIONS)[number]["value"];
 
 const VALID_MODES = new Set<string>(IGNORE_WHITESPACE_OPTIONS.map((o) => o.value));
 
@@ -70,9 +66,9 @@ export function myersLcs(a: string[], b: string[], maxD = MAX_MYERS_D): Array<[n
 
   const N = n - pre - suf;
   const M = m - pre - suf;
-  if (N === 0 || M === 0) return [...prefix, ...suffix];
-
   const limit = Math.min(N + M, maxD);
+  if (N === 0 || M === 0 || limit <= 0) return [...prefix, ...suffix];
+
   const offset = limit;
   const v = new Int32Array(2 * limit + 1);
   const trace: Int32Array[] = [];
@@ -94,10 +90,11 @@ export function myersLcs(a: string[], b: string[], maxD = MAX_MYERS_D): Array<[n
       v[offset + k] = x;
       if (x >= N && y >= M) {
         foundD = d;
+        break;
       }
     }
-    trace.push(v.slice(offset - d, offset + d + 1));
     if (foundD >= 0) break;
+    trace.push(v.slice(offset - d, offset + d + 1));
   }
 
   if (foundD < 0) return [...prefix, ...suffix];
@@ -125,11 +122,6 @@ export function myersLcs(a: string[], b: string[], maxD = MAX_MYERS_D): Array<[n
     x = prevX;
     y = prevY;
   }
-  while (x > 0 && y > 0) {
-    x--;
-    y--;
-    mid.push([pre + x, pre + y]);
-  }
   mid.reverse();
 
   return [...prefix, ...mid, ...suffix];
@@ -141,58 +133,44 @@ function makeMatchedContext(oldLine: number | null, oldContent: string, newLine:
     : { type: "context", oldLine, newLine, content: newContent };
 }
 
-function diffChangeRun(dels: DiffLine[], adds: DiffLine[], mode: "trim" | "all"): DiffLine[] {
-  if (dels.length === 0 || adds.length === 0) return [...dels, ...adds];
-
-  const delKeys = dels.map((l) => normalizeLine(l.content, mode));
-  const addKeys = adds.map((l) => normalizeLine(l.content, mode));
-  const matches = myersLcs(delKeys, addKeys);
-  if (matches.length === 0) return [...dels, ...adds];
-
-  const out: DiffLine[] = [];
-  let di = 0;
-  let ai = 0;
-  for (const [md, ma] of matches) {
-    while (di < md) out.push(dels[di++]!);
-    while (ai < ma) out.push(adds[ai++]!);
-    const d = dels[md]!;
-    const a = adds[ma]!;
-    out.push(makeMatchedContext(d.oldLine, d.content, a.newLine, a.content));
-    di = md + 1;
-    ai = ma + 1;
-  }
-  while (di < dels.length) out.push(dels[di++]!);
-  while (ai < adds.length) out.push(adds[ai++]!);
-  return out;
-}
-
 interface SideEntry {
   lineNum: number | null;
   content: string;
   key: string;
+  blank: boolean;
 }
 
-function emitAllAndEmptyGap(oldGap: SideEntry[], newGap: SideEntry[], out: DiffLine[]): void {
+function collectMatchable(entries: SideEntry[]): { indices: number[]; keys: string[] } {
+  const indices: number[] = [];
+  const keys: string[] = [];
+  entries.forEach((entry, idx) => {
+    if (!entry.blank) {
+      indices.push(idx);
+      keys.push(entry.key);
+    }
+  });
+  return { indices, keys };
+}
+
+function emitGap(oldGap: SideEntry[], newGap: SideEntry[], out: DiffLine[]): void {
   let oi = 0;
   let ni = 0;
   while (oi < oldGap.length || ni < newGap.length) {
     const o = oi < oldGap.length ? oldGap[oi]! : null;
     const n = ni < newGap.length ? newGap[ni]! : null;
-    const oBlank = o !== null && o.key === "";
-    const nBlank = n !== null && n.key === "";
 
-    if (oBlank && nBlank) {
+    if (o?.blank && n?.blank) {
       out.push(makeMatchedContext(o.lineNum, o.content, n.lineNum, n.content));
       oi++;
       ni++;
       continue;
     }
-    if (oBlank) {
+    if (o?.blank) {
       out.push({ type: "context", oldLine: o.lineNum, newLine: null, content: o.content });
       oi++;
       continue;
     }
-    if (nBlank) {
+    if (n?.blank) {
       out.push({ type: "context", oldLine: null, newLine: n.lineNum, content: n.content });
       ni++;
       continue;
@@ -200,58 +178,44 @@ function emitAllAndEmptyGap(oldGap: SideEntry[], newGap: SideEntry[], out: DiffL
 
     // Emit contiguous non-blank deletions followed by contiguous non-blank additions
     // so split-view pairing aligns edits side-by-side.
-    while (oi < oldGap.length && oldGap[oi]!.key !== "") {
+    while (oi < oldGap.length && !oldGap[oi]!.blank) {
       const entry = oldGap[oi++]!;
       out.push({ type: "deletion", oldLine: entry.lineNum, newLine: null, content: entry.content });
     }
-    while (ni < newGap.length && newGap[ni]!.key !== "") {
+    while (ni < newGap.length && !newGap[ni]!.blank) {
       const entry = newGap[ni++]!;
       out.push({ type: "addition", oldLine: null, newLine: entry.lineNum, content: entry.content });
     }
   }
 }
 
-function diffAllAndEmptySpan(span: DiffLine[]): DiffLine[] {
+function realignSpan(span: DiffLine[], mode: Exclude<IgnoreWhitespace, "none">): DiffLine[] {
+  const ignoreEmpty = mode === "all-and-empty";
   const oldEntries: SideEntry[] = [];
   const newEntries: SideEntry[] = [];
 
   for (const line of span) {
-    if (line.oldLine != null) {
-      const text = line.oldContent ?? line.content;
-      oldEntries.push({ lineNum: line.oldLine, content: text, key: normalizeLine(text, "all-and-empty") });
-    }
-    if (line.newLine != null) {
-      newEntries.push({ lineNum: line.newLine, content: line.content, key: normalizeLine(line.content, "all-and-empty") });
-    }
+    const key = normalizeLine(line.content, mode);
+    const blank = ignoreEmpty && key === "";
+    if (line.oldLine != null) oldEntries.push({ lineNum: line.oldLine, content: line.content, key, blank });
+    if (line.newLine != null) newEntries.push({ lineNum: line.newLine, content: line.content, key, blank });
   }
 
-  const oldNonBlankIdx: number[] = [];
-  const oldNonBlankKeys: string[] = [];
-  oldEntries.forEach((e, idx) => {
-    if (e.key !== "") {
-      oldNonBlankIdx.push(idx);
-      oldNonBlankKeys.push(e.key);
-    }
-  });
+  if (!ignoreEmpty && (oldEntries.length === 0 || newEntries.length === 0)) return span;
 
-  const newNonBlankIdx: number[] = [];
-  const newNonBlankKeys: string[] = [];
-  newEntries.forEach((e, idx) => {
-    if (e.key !== "") {
-      newNonBlankIdx.push(idx);
-      newNonBlankKeys.push(e.key);
-    }
-  });
+  const oldMatchable = collectMatchable(oldEntries);
+  const newMatchable = collectMatchable(newEntries);
+  const matches = myersLcs(oldMatchable.keys, newMatchable.keys);
+  if (!ignoreEmpty && matches.length === 0) return span;
 
-  const matches = myersLcs(oldNonBlankKeys, newNonBlankKeys);
   const out: DiffLine[] = [];
   let prevO = 0;
   let prevN = 0;
 
   for (const [mO, mN] of matches) {
-    const oi = oldNonBlankIdx[mO]!;
-    const ni = newNonBlankIdx[mN]!;
-    emitAllAndEmptyGap(oldEntries.slice(prevO, oi), newEntries.slice(prevN, ni), out);
+    const oi = oldMatchable.indices[mO]!;
+    const ni = newMatchable.indices[mN]!;
+    emitGap(oldEntries.slice(prevO, oi), newEntries.slice(prevN, ni), out);
     const o = oldEntries[oi]!;
     const n = newEntries[ni]!;
     out.push(makeMatchedContext(o.lineNum, o.content, n.lineNum, n.content));
@@ -259,55 +223,38 @@ function diffAllAndEmptySpan(span: DiffLine[]): DiffLine[] {
     prevN = ni + 1;
   }
 
-  emitAllAndEmptyGap(oldEntries.slice(prevO), newEntries.slice(prevN), out);
+  emitGap(oldEntries.slice(prevO), newEntries.slice(prevN), out);
   return out;
 }
 
 export function transformHunk(hunk: DiffHunk, mode: IgnoreWhitespace): DiffHunk {
   if (mode === "none") return hunk;
 
-  if (mode === "all-and-empty") {
-    const out: DiffLine[] = [];
-    let span: DiffLine[] = [];
-    let spanHasChanges = false;
-
-    const flush = () => {
-      if (span.length === 0) return;
-      if (spanHasChanges) out.push(...diffAllAndEmptySpan(span));
-      else out.push(...span);
-      span = [];
-      spanHasChanges = false;
-    };
-
-    for (const line of hunk.lines) {
-      if (line.type === "context" && line.content.trim().length > 0) {
-        flush();
-        out.push(line);
-      } else {
-        span.push(line);
-        if (line.type !== "context") spanHasChanges = true;
-      }
-    }
-    flush();
-    return { header: hunk.header, lines: out };
-  }
+  const ignoreEmpty = mode === "all-and-empty";
+  const isAnchor = (line: DiffLine) => line.type === "context" && (!ignoreEmpty || line.content.trim().length > 0);
 
   const out: DiffLine[] = [];
-  let i = 0;
-  const lines = hunk.lines;
-  while (i < lines.length) {
-    const line = lines[i]!;
-    if (line.type === "context") {
+  let span: DiffLine[] = [];
+  let spanHasChanges = false;
+
+  const flush = () => {
+    if (span.length === 0) return;
+    out.push(...(spanHasChanges ? realignSpan(span, mode) : span));
+    span = [];
+    spanHasChanges = false;
+  };
+
+  for (const line of hunk.lines) {
+    if (isAnchor(line)) {
+      flush();
       out.push(line);
-      i++;
-      continue;
+    } else {
+      span.push(line);
+      if (line.type !== "context") spanHasChanges = true;
     }
-    const dels: DiffLine[] = [];
-    const adds: DiffLine[] = [];
-    while (i < lines.length && lines[i]!.type === "deletion") dels.push(lines[i++]!);
-    while (i < lines.length && lines[i]!.type === "addition") adds.push(lines[i++]!);
-    out.push(...diffChangeRun(dels, adds, mode));
   }
+  flush();
+
   return { header: hunk.header, lines: out };
 }
 
@@ -339,8 +286,4 @@ export function applyWhitespaceToFile(file: DiffFile, mode: IgnoreWhitespace, dr
 export function applyWhitespacePolicy(files: DiffFile[], mode: IgnoreWhitespace, dropEmptyHunks: boolean): DiffFile[] {
   if (mode === "none") return files;
   return files.map((file) => applyWhitespaceToFile(file, mode, dropEmptyHunks));
-}
-
-export function isWhitespaceOnlyResult(file: DiffFile, mode: IgnoreWhitespace): boolean {
-  return mode !== "none" && file.whitespaceOnly === true;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { isAnchored, partitionComments } from "../src/core/anchor";
+import { anchoredLines, isAnchored, partitionComments } from "../src/core/anchor";
 import type { DiffResult, Comment, DiffFile, DiffLine } from "../src/types";
 
 // a 5-line modified file: lines 1-5 on the new side, line 3 also a deletion on the old side.
@@ -105,5 +105,18 @@ describe("isAnchored with stored line content", () => {
 
   it("ignores trailing whitespace", () => {
     expect(isAnchored(comment({ line: 1, lineContent: " one  " }), diff)).toBe(true);
+  });
+
+  it("reads oldContent on old-side whitespace-ignored context lines", () => {
+    const wsFile: DiffFile = {
+      path: "src/ws.ts",
+      oldPath: null,
+      changeType: "modified",
+      additions: 0,
+      deletions: 0,
+      hunks: [{ header: "@@ -1,1 +1,1 @@", lines: [{ type: "context", oldLine: 1, newLine: 1, content: "    x = 1", oldContent: "x = 1" }] }],
+    };
+    expect(anchoredLines(wsFile, "old", 1, 1)).toEqual(["x = 1"]);
+    expect(anchoredLines(wsFile, "new", 1, 1)).toEqual(["    x = 1"]);
   });
 });

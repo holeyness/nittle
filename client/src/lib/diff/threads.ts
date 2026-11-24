@@ -3,7 +3,7 @@
 // answer "is this line pending/in-range?" and build the comment to save.
 
 import type { Comment, DiffFile, DiffLine } from "$types";
-import { SPAN_GAP_MESSAGE, contiguousLines } from "$lib/anchor";
+import { SPAN_GAP_MESSAGE, contiguousLines, lineText } from "$lib/anchor";
 
 export type Side = "old" | "new";
 
@@ -26,8 +26,7 @@ const endOf = (c: Comment): number => (c.endLine != null ? c.endLine : (c.line a
 // the raw diff line (marker + content) recorded on a comment anchor.
 export function rawLine(line: DiffLine, side?: Side): string {
   const sign = line.type === "addition" ? "+" : line.type === "deletion" ? "-" : " ";
-  const text = side === "old" && line.oldContent !== undefined ? line.oldContent : line.content;
-  return sign + text;
+  return sign + lineText(line, side);
 }
 
 // stamp a fresh id + timestamp onto a new comment.

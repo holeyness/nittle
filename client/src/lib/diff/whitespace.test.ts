@@ -3,7 +3,6 @@ import type { DiffFile, DiffHunk, DiffLine } from "$types";
 import {
   applyWhitespacePolicy,
   applyWhitespaceToFile,
-  isWhitespaceOnlyResult,
   myersLcs,
   transformHunk,
 } from "./whitespace";
@@ -59,10 +58,14 @@ describe("myersLcs", () => {
     expect(myersLcs(["a", "b"], ["c", "d"])).toEqual([]);
   });
 
-  it("degrades safely when edit distance exceeds maxD", () => {
+  it("degrades safely when edit distance exceeds maxD (including maxD = 0)", () => {
     const a = ["same", "1", "2", "3", "4", "end"];
     const b = ["same", "a", "b", "c", "d", "end"];
     expect(myersLcs(a, b, 2)).toEqual([
+      [0, 0],
+      [5, 5],
+    ]);
+    expect(myersLcs(a, b, 0)).toEqual([
       [0, 0],
       [5, 5],
     ]);
@@ -209,19 +212,19 @@ describe("applyWhitespacePolicy", () => {
     expect(fullResult.additions).toBe(0);
     expect(fullResult.deletions).toBe(0);
     expect(fullResult.hunks).toHaveLength(1);
-    expect(isWhitespaceOnlyResult(fullResult, "trim")).toBe(true);
+    expect(fullResult.whitespaceOnly).toBe(true);
 
     const hunkResult = applyWhitespacePolicy([wsOnlyFile], "trim", true)[0]!;
     expect(hunkResult.additions).toBe(0);
     expect(hunkResult.deletions).toBe(0);
     expect(hunkResult.hunks).toHaveLength(0);
-    expect(isWhitespaceOnlyResult(hunkResult, "trim")).toBe(true);
+    expect(hunkResult.whitespaceOnly).toBe(true);
 
     const mixedFile = makeFile([wsOnlyHunk, realHunk]);
     const mixedHunkMode = applyWhitespacePolicy([mixedFile], "trim", true)[0]!;
     expect(mixedHunkMode.hunks).toHaveLength(1);
     expect(mixedHunkMode.hunks[0]!.header).toBe("@@ -10,2 +10,2 @@");
-    expect(isWhitespaceOnlyResult(mixedHunkMode, "trim")).toBe(false);
+    expect(mixedHunkMode.whitespaceOnly).toBeUndefined();
   });
 
   it("leaves added, deleted, and binary files untouched", () => {
@@ -239,7 +242,7 @@ describe("applyWhitespacePolicy", () => {
     expect(applyWhitespaceToFile(added, "all-and-empty", false)).toBe(added);
     expect(applyWhitespaceToFile(deleted, "all-and-empty", false)).toBe(deleted);
     expect(applyWhitespaceToFile(binary, "all-and-empty", false)).toBe(binary);
-    expect(isWhitespaceOnlyResult(binary, "all-and-empty")).toBe(false);
+    expect(binary.whitespaceOnly).toBeUndefined();
   });
 
   it("does not mislabel a pure 100%-identical rename or mode-only change as whitespace-only", () => {
@@ -253,6 +256,5 @@ describe("applyWhitespacePolicy", () => {
     };
     const out = applyWhitespaceToFile(pureRename, "trim", false);
     expect(out.whitespaceOnly).toBeUndefined();
-    expect(isWhitespaceOnlyResult(out, "trim")).toBe(false);
   });
 });

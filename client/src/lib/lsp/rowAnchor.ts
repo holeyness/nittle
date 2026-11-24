@@ -5,9 +5,8 @@
 import type { DiffLine, LspSide } from "$types";
 
 export function lspAnchor(line: DiffLine, pane?: LspSide): { side: LspSide; line: number } | null {
-  if (line.type === "deletion") return line.oldLine == null ? null : { side: "old", line: line.oldLine };
-  if (pane === "old" && (line.oldContent !== undefined || line.newLine == null)) {
+  if (line.type === "deletion" || line.newLine == null || (pane === "old" && line.oldContent !== undefined)) {
     return line.oldLine == null ? null : { side: "old", line: line.oldLine };
   }
-  return line.newLine == null ? null : { side: "new", line: line.newLine };
+  return { side: "new", line: line.newLine };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DiffFile, DiffLine } from "$types";
-import { highlightFile, highlightFileSides, needsFileText } from "./highlight";
+import { highlightFile, needsFileText } from "./highlight";
 
 const KEYWORD = "var(--syn-keyword)";
 
@@ -19,17 +19,17 @@ const svelteHunk = () => [ctx(3, 3, "  let count = $state(0);"), ctx(4, 4, "</sc
 describe("highlightFile", () => {
   it("seeds a mid-file hunk with the file's context so embedded script highlights", async () => {
     const f = file("App.svelte", svelteHunk());
-    const html = await highlightFile(f, SVELTE_TEXT);
+    const { html } = await highlightFile(f, SVELTE_TEXT);
     expect(html.get(f.hunks[0]!.lines[0]!)).toContain(KEYWORD);
     // without the file text the same line reads as markup text
     const bare = await highlightFile(f, null);
-    expect(bare.get(f.hunks[0]!.lines[0]!)).not.toContain(KEYWORD);
+    expect(bare.html.get(f.hunks[0]!.lines[0]!)).not.toContain(KEYWORD);
   });
 
   it("highlights old-side deletions and new-side additions separately", async () => {
     const lines = [ctx(1, 1, "const a = 1;"), del(2, "let b = 'old';"), add(2, "let b = 'new';")];
     const f = file("a.ts", lines, "modified", "@@ -1,2 +1,2 @@");
-    const html = await highlightFile(f, null);
+    const { html } = await highlightFile(f, null);
     expect(html.get(lines[1]!)).toContain("old");
     expect(html.get(lines[2]!)).toContain("new");
     expect(html.get(lines[0]!)).toContain(KEYWORD);
@@ -37,13 +37,13 @@ describe("highlightFile", () => {
 
   it("escapes markup inside tokens", async () => {
     const line = add(1, "const s = '<b>&';");
-    const html = await highlightFile(file("a.ts", [line], "added", "@@ -0,0 +1 @@"), null);
+    const { html } = await highlightFile(file("a.ts", [line], "added", "@@ -0,0 +1 @@"), null);
     expect(html.get(line)).toContain("&lt;b&gt;&amp;");
     expect(html.get(line)).not.toContain("<b>");
   });
 
   it("returns nothing for files without a grammar", async () => {
-    const html = await highlightFile(file("notes.unknownext", [add(1, "hello")], "added"), null);
+    const { html } = await highlightFile(file("notes.unknownext", [add(1, "hello")], "added"), null);
     expect(html.size).toBe(0);
   });
 
@@ -57,7 +57,7 @@ describe("highlightFile", () => {
     };
     const blankNew: DiffLine = { type: "context", oldLine: null, newLine: 1, content: "" };
     const f = file("a.ts", [blankNew, reindented], "modified", "@@ -1,1 +1,2 @@");
-    const { html, oldHtml } = await highlightFileSides(f, null);
+    const { html, oldHtml } = await highlightFile(f, null);
     expect(html.get(reindented)).toContain("    ");
     expect(html.get(reindented)).toContain(KEYWORD);
     expect(oldHtml.get(reindented)).toContain(KEYWORD);

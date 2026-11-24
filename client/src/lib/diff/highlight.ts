@@ -35,7 +35,7 @@ export interface SideLineHtml {
 
 // highlighted html per diff line for both sides; `oldHtml` holds old-side markup for
 // whitespace-ignored context lines whose old text differs from `line.content`.
-export async function highlightFileSides(file: DiffFile, newText: string | null): Promise<SideLineHtml> {
+export async function highlightFile(file: DiffFile, newText: string | null): Promise<SideLineHtml> {
   const html: LineHtml = new Map();
   const oldHtml: LineHtml = new Map();
   const lang = languageFor(file.path);
@@ -51,8 +51,8 @@ export async function highlightFileSides(file: DiffFile, newText: string | null)
       state = stateAfter(hl, source.slice(consumed, start), lang, state);
       consumed = start;
     }
-    const oldSide = hunk.lines.filter((l) => l.type !== "addition" && (l.type === "deletion" || l.oldLine != null));
-    const newSide = hunk.lines.filter((l) => l.type !== "deletion" && (l.type === "addition" || l.newLine != null));
+    const oldSide = hunk.lines.filter((l) => l.type === "deletion" || l.oldLine != null);
+    const newSide = hunk.lines.filter((l) => l.type === "addition" || l.newLine != null);
     const old = highlightLines(hl, oldSide.map((l) => l.oldContent ?? l.content), lang, state);
     const next = highlightLines(hl, newSide.map((l) => l.content), lang, state);
     oldSide.forEach((l, i) => {
@@ -65,9 +65,4 @@ export async function highlightFileSides(file: DiffFile, newText: string | null)
     if (!source) state = newSide.length ? next.state : old.state;
   }
   return { html, oldHtml };
-}
-
-// highlighted html per diff line; empty when the language has no grammar.
-export async function highlightFile(file: DiffFile, newText: string | null): Promise<LineHtml> {
-  return (await highlightFileSides(file, newText)).html;
 }

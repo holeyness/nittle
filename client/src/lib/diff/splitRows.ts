@@ -1,4 +1,5 @@
-import type { Comment, DiffFile, DiffLine, IgnoreWhitespace } from "$types";
+import type { Comment, DiffFile, DiffLine } from "$types";
+import type { IgnoreWhitespace } from "./whitespace";
 import { commentsForLine, isAddingAt, type AddTarget } from "./threads";
 import { pairLines, hunkMarks, type CharRange, type SplitRow } from "./wordDiff";
 

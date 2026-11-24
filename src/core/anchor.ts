@@ -13,6 +13,11 @@ export function numOn(line: DiffLine, side: Side): number | null {
   return side === "old" ? line.oldLine : line.newLine;
 }
 
+// the line's text on the given side (preserves old-side text on whitespace-ignored context lines).
+export function lineText(line: DiffLine, side?: Side): string {
+  return side === "old" && line.oldContent !== undefined ? line.oldContent : line.content;
+}
+
 // inclusive end of a comment's range; single-line when endLine is absent/null.
 export function rangeEnd(c: Comment): number {
   return c.endLine != null ? Math.max(c.line as number, c.endLine) : (c.line as number);
@@ -51,7 +56,7 @@ export function anchoredLines(file: DiffFile | undefined, side: Side, start: num
       const n = numOn(l, side);
       return n != null && n >= start && n <= end;
     })
-    .map((l) => l.content);
+    .map((l) => lineText(l, side));
 }
 
 export const SPAN_GAP_MESSAGE = "this range spans unchanged lines that are not in the diff, so it cannot carry a suggestion; comment on lines inside one hunk";
