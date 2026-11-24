@@ -35,10 +35,12 @@ describe("prefs store", () => {
     const prefs = createPrefsStore({ storage: fakeStorage(), matchMedia: media(false) });
     expect(prefs.theme).toBe("light");
     expect(prefs.sidebarWidth).toBe(280);
-    expect(prefs.split).toBe(false);
+    expect(prefs.split).toBe(true);
     expect(prefs.splitRatio).toBe(50);
     expect(prefs.wrap).toBe(false);
-    expect(prefs.fileView).toBe("all");
+    expect(prefs.fullFile).toBe(true);
+    expect(prefs.commitsOpen).toBe(true);
+    expect(prefs.fileView).toBe("single");
     expect(prefs.fileOrder).toBe("tree");
   });
   it("persists the file order and ignores junk", () => {
@@ -63,15 +65,19 @@ describe("prefs store", () => {
     a.toggleSplit();
     a.setSplitRatio(63);
     a.toggleWrap();
-    a.setFileView("single");
+    a.toggleFullFile();
+    a.toggleCommitsOpen();
+    a.setFileView("all");
 
     const b = createPrefsStore({ storage, matchMedia: media(false) });
     expect(b.theme).toBe("dark");
     expect(b.sidebarWidth).toBe(320);
-    expect(b.split).toBe(true);
+    expect(b.split).toBe(false);
     expect(b.splitRatio).toBe(63);
     expect(b.wrap).toBe(true);
-    expect(b.fileView).toBe("single");
+    expect(b.fullFile).toBe(false);
+    expect(b.commitsOpen).toBe(false);
+    expect(b.fileView).toBe("all");
   });
 
   it("toggleTheme flips the value and reflects it on the document", () => {

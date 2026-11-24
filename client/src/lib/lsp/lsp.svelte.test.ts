@@ -377,4 +377,38 @@ describe("lsp store: hops inside the viewer", () => {
     await flush();
     expect(lsp.viewerBack()).toBe(false);
   });
+
+  it("navBack and navForward step back to the diff and forward through viewer hops", async () => {
+    const ctx = await openFirstHop();
+    api.lspDefinition.mockResolvedValueOnce(answer([target("src/deep.ts", 9)]));
+    api.lspFile.mockResolvedValueOnce({ content: "deep\nfile" });
+    ctx.lsp.definitionAtHit(viewerHit("src/env.ts"));
+    await flush();
+
+    expect(ctx.lsp.viewer?.target.path).toBe("src/deep.ts");
+    expect(ctx.lsp.canGoBack).toBe(true);
+    expect(ctx.lsp.canGoForward).toBe(false);
+
+    // back from deep.ts -> env.ts
+    expect(ctx.lsp.navBack()).toBe(true);
+    await flush();
+    expect(ctx.lsp.viewer?.target.path).toBe("src/env.ts");
+    expect(ctx.lsp.canGoForward).toBe(true);
+
+    // back from env.ts -> original diff position
+    expect(ctx.lsp.navBack()).toBe(true);
+    await flush();
+    expect(ctx.lsp.viewer).toBeNull();
+    expect(ctx.goToHit).toHaveBeenCalledWith({ path: "src/main.ts", side: "new", line: 6, preview: "", ranges: [] });
+    expect(ctx.lsp.canGoForward).toBe(true);
+
+    // forward -> env.ts -> deep.ts
+    expect(ctx.lsp.navForward()).toBe(true);
+    await flush();
+    expect(ctx.lsp.viewer?.target.path).toBe("src/env.ts");
+    expect(ctx.lsp.navForward()).toBe(true);
+    await flush();
+    expect(ctx.lsp.viewer?.target.path).toBe("src/deep.ts");
+    expect(ctx.lsp.canGoForward).toBe(false);
+  });
 });
