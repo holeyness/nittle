@@ -71,12 +71,31 @@ Navigate
 
 Reviews live outside the repo in `~/.nittle/reviews/<id>/review.json`, and nittle never loads the reviewed repo's `.env` or `bunfig.toml`.
 
+## Fork additions (`holeyness/nittle`)
+
+- **Full-file side-by-side by default:** Opens in full-file + side-by-side + single-file mode (auto-scrolling to the first change in each file), with toolbar toggles for **Full file / Hunks only**, **Side-by-side / Unified**, and **Single file / All files**.
+- **Commits & Stack sidebar (50/50 split):** Auto-detects stacked branches (`merge-base(HEAD, default)..HEAD`) with one-click three-dot slice pills, plus click (single commit), `⇧`-click (contiguous combined range), and `⌘`-click (multi-commit / 2-commit comparison) live in the same tab.
+- **Mouse-first toolbar & PyCharm-style shortcuts:**
+  - `⌥←` / `⌥→` — Previous / Next file
+  - `⌥↑` / `⌥↓` (or `Shift+F7` / `F7`) — Previous / Next change blob (advances across file boundaries)
+  - `⌥⌘←` / `⌥⌘→` (plus toolbar buttons & browser Back/Forward / trackpad swipe) — Back & Forward across `⌘`-click definition hops and external read-only files
+  - Hover card includes clickable **Go to Definition** and **Find References** buttons
+- **Global repository search (`⌘⇧F`):** Toggle between **Changed files** and **Whole repo** (`git grep` at the reviewed revision); matches outside the diff open in the read-only viewer and participate in Back/Forward history.
+- **GitHub PR review (`nittle pr [number|url]`):** Fetches `refs/pull/<N>/head` and the fresh remote base into `refs/nittle/pr-<N>{,-base}` without touching `HEAD` or your working tree, shows a clickable PR badge in the top bar, and populates the sidebar with the PR's commits.
+- **Local binary build & install:**
+  ```sh
+  bun install --registry https://registry.npmjs.org
+  bun run build:binary
+  cp dist/nittle ~/.nittle/bin/nittle && ln -sf ~/.nittle/bin/nittle ~/.local/bin/nittle
+  ```
+
 ## Commands
 
 | command | what it does |
 | --- | --- |
-| `nittle [ref]` | review a diff: none, `staged`, `<branch>`, `<ref1>..<ref2>`, `browse [path]` |
+| `nittle [ref]` | review a diff: none, `staged`, `<branch>`, `<ref1>..<ref2>`, `<ref1>...<ref2>`, `browse [path]` |
 | `nittle show [rev]` | review one commit against its first parent (HEAD by default) |
+| `nittle pr [number\|url]` | fetch a GitHub PR head & fresh base into read-only refs and open its three-dot diff |
 | `nittle --wait [ref] [--json]` | block until feedback, print the prompt (or JSON) on stdout |
 | `nittle setup` | wire nittle into your coding agents (`--remove` to undo) |
 | `nittle update` | download, verify and install the latest release (`--check` to only look) |
