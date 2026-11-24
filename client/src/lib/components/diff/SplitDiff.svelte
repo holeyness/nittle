@@ -15,7 +15,11 @@
   const id = $props.id();
   let requestedRatio = $state(untrack(() => prefs.splitRatio));
   let effectiveRatio = $state(untrack(() => prefs.splitRatio));
-  const rows = $derived(annotations.readonly ? splitRows(file, [], null) : splitRows(file, comments.comments, ui.adding));
+  const rows = $derived(
+    annotations.readonly
+      ? splitRows(file, [], null, prefs.ignoreWhitespace)
+      : splitRows(file, comments.comments, ui.adding, prefs.ignoreWhitespace),
+  );
   $effect(() => {
     requestedRatio = prefs.splitRatio;
   });

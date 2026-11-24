@@ -31,10 +31,10 @@
     return markHits(marked, search.hitsFor(file.path, line.oldLine, line.newLine), search.active);
   }
 
-  // additions + context anchor on the new side; deletions anchor on the old side.
+  // additions + context anchor on the new side; deletions (and old-only ignored lines) anchor on old.
   function anchorOf(line: DiffLine): { side: Side; line: number } | null {
     if (line.newLine != null) return { side: "new", line: line.newLine };
-    if (line.type === "deletion" && line.oldLine != null) return { side: "old", line: line.oldLine };
+    if (line.oldLine != null) return { side: "old", line: line.oldLine };
     return null;
   }
 
@@ -55,7 +55,7 @@
 
 <table class="diff-table">
   {#each file.hunks as hunk, hi (hi)}
-    {@const marks = hunkMarks(hunk.lines)}
+    {@const marks = hunkMarks(hunk.lines, prefs.ignoreWhitespace)}
     {@const whitespaceOnly = annotations.whitespaceHunks.has(hi)}
     <tbody class:ws-only={whitespaceOnly}>
       {#if (hunk.header || whitespaceOnly) && !hideFullFileHeader}

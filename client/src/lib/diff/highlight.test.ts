@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DiffFile, DiffLine } from "$types";
-import { highlightFile, needsFileText } from "./highlight";
+import { highlightFile, highlightFileSides, needsFileText } from "./highlight";
 
 const KEYWORD = "var(--syn-keyword)";
 
@@ -45,6 +45,23 @@ describe("highlightFile", () => {
   it("returns nothing for files without a grammar", async () => {
     const html = await highlightFile(file("notes.unknownext", [add(1, "hello")], "added"), null);
     expect(html.size).toBe(0);
+  });
+
+  it("highlights oldContent separately from new content for whitespace-ignored context lines", async () => {
+    const reindented: DiffLine = {
+      type: "context",
+      oldLine: 1,
+      newLine: 2,
+      content: "    const a = 1;",
+      oldContent: "const a = 1;",
+    };
+    const blankNew: DiffLine = { type: "context", oldLine: null, newLine: 1, content: "" };
+    const f = file("a.ts", [blankNew, reindented], "modified", "@@ -1,1 +1,2 @@");
+    const { html, oldHtml } = await highlightFileSides(f, null);
+    expect(html.get(reindented)).toContain("    ");
+    expect(html.get(reindented)).toContain(KEYWORD);
+    expect(oldHtml.get(reindented)).toContain(KEYWORD);
+    expect(oldHtml.get(reindented)).not.toContain("    ");
   });
 });
 

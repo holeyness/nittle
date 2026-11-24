@@ -1,21 +1,25 @@
 // intra-line word diff: pairs deletion/addition runs and computes the changed char range
 // inside each modified line pair. pure — no dom, unit-testable.
 
-import type { DiffLine } from "$types";
+import type { DiffLine, IgnoreWhitespace } from "$types";
 
 export interface SplitRow {
   left: DiffLine | null;
   right: DiffLine | null;
 }
 
-// pair deletions with additions for side-by-side rows; context spans both columns.
+// pair deletions with additions for side-by-side rows; context spans both columns
+// (one-sided context lines from ignored empty lines occupy only the side they exist on).
 export function pairLines(lines: DiffLine[]): SplitRow[] {
   const rows: SplitRow[] = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i]!;
     if (line.type === "context") {
-      rows.push({ left: line, right: line });
+      rows.push({
+        left: line.oldLine != null ? line : null,
+        right: line.newLine != null ? line : null,
+      });
       i++;
       continue;
     }
@@ -38,39 +42,69 @@ export interface PairRange {
   new: CharRange;
 }
 
+interface Token {
+  text: string;
+  start: number;
+  end: number;
+  isWs: boolean;
+}
+
 const TOKEN = /\w+|\s+|[^\w\s]/g;
-const tokensOf = (s: string): string[] => s.match(TOKEN) ?? [];
+const IS_WS = /^\s+$/;
+
+function tokenize(s: string, ignoreWhitespace: IgnoreWhitespace): Token[] {
+  const raw: Token[] = [];
+  for (const m of s.matchAll(TOKEN)) {
+    const text = m[0];
+    const start = m.index ?? 0;
+    raw.push({ text, start, end: start + text.length, isWs: IS_WS.test(text) });
+  }
+  if (ignoreWhitespace === "trim") {
+    let lo = 0;
+    let hi = raw.length;
+    while (lo < hi && raw[lo]!.isWs) lo++;
+    while (hi > lo && raw[hi - 1]!.isWs) hi--;
+    return raw.slice(lo, hi);
+  }
+  if (ignoreWhitespace === "all" || ignoreWhitespace === "all-and-empty") {
+    return raw.filter((t) => !t.isWs);
+  }
+  return raw;
+}
+
+function tokenSpan(tokens: Token[], pre: number, end: number): CharRange {
+  if (pre < end) return { start: tokens[pre]!.start, end: tokens[end - 1]!.end };
+  const pos = pre > 0 ? tokens[pre - 1]!.end : (tokens[0]?.start ?? 0);
+  return { start: pos, end: pos };
+}
 
 // char ranges [start, end) of the differing middle of a deletion/addition pair, via common
 // token prefix + suffix. null when the lines are identical or share no tokens at all.
-export function diffRange(oldText: string, newText: string): PairRange | null {
-  const a = tokensOf(oldText);
-  const b = tokensOf(newText);
+export function diffRange(oldText: string, newText: string, ignoreWhitespace: IgnoreWhitespace = "none"): PairRange | null {
+  const a = tokenize(oldText, ignoreWhitespace);
+  const b = tokenize(newText, ignoreWhitespace);
   let pre = 0;
-  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  while (pre < a.length && pre < b.length && a[pre]!.text === b[pre]!.text) pre++;
   let endA = a.length;
   let endB = b.length;
-  while (endA > pre && endB > pre && a[endA - 1] === b[endB - 1]) {
+  while (endA > pre && endB > pre && a[endA - 1]!.text === b[endB - 1]!.text) {
     endA--;
     endB--;
   }
   if (pre === endA && pre === endB) return null; // identical
   if (pre === 0 && endA === a.length && endB === b.length) return null; // nothing in common
-  const len = (arr: string[], from: number, to: number): number => arr.slice(from, to).join("").length;
-  const oldStart = len(a, 0, pre);
-  const newStart = len(b, 0, pre);
   return {
-    old: { start: oldStart, end: oldStart + len(a, pre, endA) },
-    new: { start: newStart, end: newStart + len(b, pre, endB) },
+    old: tokenSpan(a, pre, endA),
+    new: tokenSpan(b, pre, endB),
   };
 }
 
 // per-line marks for a hunk's lines: Map<line, {start,end}> covering both sides.
-export function hunkMarks(lines: DiffLine[]): Map<DiffLine, CharRange> {
+export function hunkMarks(lines: DiffLine[], ignoreWhitespace: IgnoreWhitespace = "none"): Map<DiffLine, CharRange> {
   const marks = new Map<DiffLine, CharRange>();
   for (const { left, right } of pairLines(lines)) {
     if (!left || !right || left.type !== "deletion" || right.type !== "addition") continue;
-    const range = diffRange(left.content, right.content);
+    const range = diffRange(left.content, right.content, ignoreWhitespace);
     if (!range) continue;
     if (range.old.end > range.old.start) marks.set(left, range.old);
     if (range.new.end > range.new.start) marks.set(right, range.new);

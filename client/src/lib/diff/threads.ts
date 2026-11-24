@@ -24,9 +24,10 @@ const sideOf = (c: Comment): Side => c.side ?? "new";
 const endOf = (c: Comment): number => (c.endLine != null ? c.endLine : (c.line as number));
 
 // the raw diff line (marker + content) recorded on a comment anchor.
-export function rawLine(line: DiffLine): string {
+export function rawLine(line: DiffLine, side?: Side): string {
   const sign = line.type === "addition" ? "+" : line.type === "deletion" ? "-" : " ";
-  return sign + line.content;
+  const text = side === "old" && line.oldContent !== undefined ? line.oldContent : line.content;
+  return sign + text;
 }
 
 // stamp a fresh id + timestamp onto a new comment.

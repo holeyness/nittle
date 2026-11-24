@@ -24,7 +24,7 @@
     rows: SplitDisplayRow[];
     side: Side;
     id: string;
-    highlighted: (line: DiffLine) => string;
+    highlighted: (line: DiffLine, side?: Side) => string;
     annotations?: DiffAnnotations;
   }
 
@@ -44,10 +44,13 @@
   }
 
   function renderCode(line: DiffLine, marks: Map<DiffLine, CharRange>): string {
-    const html = highlighted(line);
+    const html = highlighted(line, side);
     const mark = marks.get(line);
     const marked = mark ? markRange(html, mark.start, mark.end, `wd wd-${line.type}`) : html;
-    return markHits(marked, search.hitsFor(file.path, line.oldLine, line.newLine), search.active);
+    // search offsets are indexed against line.content (new side); skip on old-pane lines whose
+    // indentation differed so highlights never land on shifted characters.
+    const hits = side === "old" && line.oldContent !== undefined ? undefined : search.hitsFor(file.path, line.oldLine, line.newLine);
+    return markHits(marked, hits, search.active);
   }
 
   function movedAt(line: DiffLine | null | undefined): MovedMark | null {
@@ -64,7 +67,7 @@
       file: file.path,
       side,
       ...range,
-      lineContent: rawLine(line),
+      lineContent: rawLine(line, side),
       text,
       tag,
     });
@@ -96,7 +99,7 @@
       {@const moved = movedAt(line)}
       {@const onCursor = !!line && cursorOnLine(here, line, side)}
       {@const interactive = number != null && !annotations.readonly}
-      {@const lsp = line && interactive ? lspAnchor(line) : null}
+      {@const lsp = line && interactive ? lspAnchor(line, side) : null}
       {@const selected = number != null && isPending(ui.adding, ui.selecting, file.path, side, number)}
       {@const ranged = number != null && inSavedRange(fileComments, side, number)}
       <div

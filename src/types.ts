@@ -7,11 +7,14 @@ export type ChangeType = "added" | "modified" | "deleted" | "renamed";
 
 export type LineType = "context" | "addition" | "deletion";
 
+export type IgnoreWhitespace = "none" | "trim" | "all" | "all-and-empty";
+
 export interface DiffLine {
   type: LineType;
-  oldLine: number | null; // null on additions
-  newLine: number | null; // null on deletions
+  oldLine: number | null; // null on additions (or new-only ignored blank lines)
+  newLine: number | null; // null on deletions (or old-only ignored blank lines)
   content: string; // line text without the leading +/-/space marker
+  oldContent?: string; // old-side text when a whitespace-ignored context line differs from `content`
 }
 
 export interface DiffHunk {
@@ -26,6 +29,7 @@ export interface DiffFile {
   additions: number;
   deletions: number;
   binary?: boolean; // true for binary files; hunks is then empty
+  whitespaceOnly?: boolean; // true when an active whitespace policy filtered out every change in this file
   hunks: DiffHunk[];
 }
 

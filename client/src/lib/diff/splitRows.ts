@@ -1,4 +1,4 @@
-import type { Comment, DiffFile, DiffLine } from "$types";
+import type { Comment, DiffFile, DiffLine, IgnoreWhitespace } from "$types";
 import { commentsForLine, isAddingAt, type AddTarget } from "./threads";
 import { pairLines, hunkMarks, type CharRange, type SplitRow } from "./wordDiff";
 
@@ -25,14 +25,19 @@ export type SplitDisplayRow =
     };
 
 // both panes render the same row slots, including a shared slot for comments on either side.
-export function splitRows(file: DiffFile, comments: Comment[], adding: AddTarget | null): SplitDisplayRow[] {
+export function splitRows(
+  file: DiffFile,
+  comments: Comment[],
+  adding: AddTarget | null,
+  ignoreWhitespace: IgnoreWhitespace = "none",
+): SplitDisplayRow[] {
   const result: SplitDisplayRow[] = [];
   const fileComments = comments.filter((comment) => comment.file === file.path);
   file.hunks.forEach((hunk, hunkIndex) => {
     if (hunk.header) {
       result.push({ key: `${hunkIndex}-header`, kind: "header", text: hunk.header });
     }
-    const marks = hunkMarks(hunk.lines);
+    const marks = hunkMarks(hunk.lines, ignoreWhitespace);
     pairLines(hunk.lines).forEach((pair, rowIndex) => {
       const key = `${hunkIndex}-${rowIndex}`;
       result.push({ key, kind: "code", pair, marks });

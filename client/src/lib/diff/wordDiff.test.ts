@@ -15,6 +15,14 @@ describe("pairLines", () => {
     expect(rows[2]!.left?.type).toBe("deletion"); // extra deletion, no addition
     expect(rows[2]!.right).toBeNull();
   });
+
+  it("places one-sided ignored blank context lines only on the side they exist on", () => {
+    const newOnly: DiffLine = { type: "context", oldLine: null, newLine: 5, content: "" };
+    const oldOnly: DiffLine = { type: "context", oldLine: 3, newLine: null, content: "" };
+    const rows = pairLines([newOnly, oldOnly]);
+    expect(rows[0]).toEqual({ left: null, right: newOnly });
+    expect(rows[1]).toEqual({ left: oldOnly, right: null });
+  });
 });
 
 describe("diffRange", () => {
@@ -28,6 +36,24 @@ describe("diffRange", () => {
     expect(r).not.toBeNull();
     expect("const a = ".length).toBe(r!.old.start);
     expect(r!.old.end).toBe(r!.old.start + 1);
+  });
+
+  it("ignores leading/trailing indentation in trim mode when marking intra-line edits", () => {
+    const oldLine = "  return foo(a, b) + 1";
+    const newLine = "      return foo(a, b) + 2";
+    const r = diffRange(oldLine, newLine, "trim");
+    expect(r).not.toBeNull();
+    expect(oldLine.slice(r!.old.start, r!.old.end)).toBe("1");
+    expect(newLine.slice(r!.new.start, r!.new.end)).toBe("2");
+  });
+
+  it("ignores all internal spacing in 'all' mode when marking intra-line edits", () => {
+    const oldLine = "  return foo(a, b) + 1";
+    const newLine = "      return foo(a,b) + 2";
+    const r = diffRange(oldLine, newLine, "all");
+    expect(r).not.toBeNull();
+    expect(oldLine.slice(r!.old.start, r!.old.end)).toBe("1");
+    expect(newLine.slice(r!.new.start, r!.new.end)).toBe("2");
   });
 });
 

@@ -8,10 +8,12 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Columns2 from "@lucide/svelte/icons/columns-2";
   import FileCode from "@lucide/svelte/icons/file-code";
+  import Pilcrow from "@lucide/svelte/icons/pilcrow";
   import Rows3 from "@lucide/svelte/icons/rows-3";
   import { getAppState } from "$lib/state/context";
   import { useOrderedFiles } from "$lib/state/orderedFiles.svelte";
   import { changeBlocksOf, type ChangeBlock } from "$lib/diff/changeBlocks";
+  import { IGNORE_WHITESPACE_OPTIONS, isIgnoreWhitespace } from "$lib/diff/whitespace";
   import { isEditable } from "$lib/keymap/editable";
   import type { DiffFile } from "$types";
 
@@ -47,7 +49,7 @@
   }
 
   function autoScrollKey(path: string, blockCount: number): string {
-    return `${diff.ref}\0${path}\0${prefs.fullFile ? "full" : "hunk"}\0${prefs.fileView}\0${blockCount}`;
+    return `${diff.ref}\0${path}\0${prefs.fullFile ? "full" : "hunk"}\0${prefs.fileView}\0${prefs.ignoreWhitespace}\0${blockCount}`;
   }
 
   // when opening a file in full-file + single-file mode, land directly on its first change block.
@@ -95,6 +97,13 @@
     return (side === "new" ? block.newLine : block.oldLine) ?? block.line;
   }
 
+  function findFileWithChanges(fromIndex: number, step: 1 | -1): number {
+    for (let i = fromIndex + step; i >= 0 && i < files.length; i += step) {
+      if (files[i]!.hunks.some((h) => h.lines.some((l) => l.type !== "context"))) return i;
+    }
+    return -1;
+  }
+
   function nextChange(): void {
     if (!activeFile) return;
     const pos = cursor.pos?.path === activeFile.path && cursor.pos.line > 0 ? cursor.pos : null;
@@ -110,8 +119,9 @@
         return;
       }
     }
-    if (activeIndex < files.length - 1) {
-      selectFileByIndex(activeIndex + 1, "first");
+    const nextFileWithChanges = findFileWithChanges(activeIndex, 1);
+    if (nextFileWithChanges >= 0) {
+      selectFileByIndex(nextFileWithChanges, "first");
     } else if (blocks.length > 0) {
       activeBlockIdx = blocks.length - 1;
       scrollToBlock(activeFile.path, blocks[blocks.length - 1]!);
@@ -139,12 +149,18 @@
         return;
       }
     }
-    if (activeIndex > 0) {
-      selectFileByIndex(activeIndex - 1, "last");
+    const prevFileWithChanges = findFileWithChanges(activeIndex, -1);
+    if (prevFileWithChanges >= 0) {
+      selectFileByIndex(prevFileWithChanges, "last");
     } else if (blocks.length > 0) {
       activeBlockIdx = 0;
       scrollToBlock(activeFile.path, blocks[0]!);
     }
+  }
+
+  function onWhitespaceChange(event: Event): void {
+    const value = (event.currentTarget as HTMLSelectElement).value;
+    if (isIgnoreWhitespace(value)) prefs.setIgnoreWhitespace(value);
   }
 
   function toggleFullFile(): void {
@@ -208,8 +224,11 @@
 
   const canPrevFile = $derived(activeIndex > 0);
   const canNextFile = $derived(activeIndex >= 0 && activeIndex < files.length - 1);
-  const canPrevChange = $derived(activeBlockIdx > 0 || canPrevFile);
-  const canNextChange = $derived((blocks.length > 0 && activeBlockIdx < blocks.length - 1) || canNextFile);
+  const hasPrevFileChanges = $derived(activeIndex > 0 && findFileWithChanges(activeIndex, -1) >= 0);
+  const hasNextFileChanges = $derived(activeIndex >= 0 && findFileWithChanges(activeIndex, 1) >= 0);
+  const canPrevChange = $derived(activeBlockIdx > 0 || hasPrevFileChanges);
+  const canNextChange = $derived((blocks.length > 0 && activeBlockIdx < blocks.length - 1) || hasNextFileChanges);
+  const ignoringWhitespace = $derived(prefs.ignoreWhitespace !== "none");
 </script>
 
 <svelte:window onkeydown={onShortcut} />
@@ -306,6 +325,23 @@
   </div>
 
   <div class="ml-auto flex flex-wrap items-center gap-1.5">
+    <label
+      class="inline-flex items-center gap-1 rounded border px-2 py-1 font-medium {ignoringWhitespace ? 'border-accent/50 bg-accent/10 text-accent' : 'border-border bg-surface-2 text-muted hover:text-text'}"
+      title="Whitespace ignore policy (IntelliJ style)"
+    >
+      <Pilcrow size={13} class="shrink-0" aria-hidden="true" />
+      <select
+        class="cursor-pointer bg-transparent text-xs font-medium text-inherit outline-none"
+        aria-label="Ignore whitespace"
+        data-ignore-whitespace
+        value={prefs.ignoreWhitespace}
+        onchange={onWhitespaceChange}
+      >
+        {#each IGNORE_WHITESPACE_OPTIONS as option (option.value)}
+          <option class="bg-surface text-text" value={option.value}>{option.label}</option>
+        {/each}
+      </select>
+    </label>
     <button
       type="button"
       class="inline-flex items-center gap-1 rounded border px-2 py-1 font-medium {prefs.fullFile ? 'border-accent/50 bg-accent/10 text-accent' : 'border-border bg-surface-2 text-muted hover:text-text'}"

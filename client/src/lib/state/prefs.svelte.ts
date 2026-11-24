@@ -2,8 +2,10 @@
 // keys are namespaced + migrated by prefs-storage; this store owns the document.theme
 // side effect and the theme-value migration (claude -> light, claude-dark -> dark).
 
+import type { IgnoreWhitespace } from "$types";
 import { readMigrated, writeKey, type StorageLike } from "./prefs-storage";
 import { DEFAULT_SPLIT_RATIO, clampSplitRatio } from "$lib/diff/splitRatio";
+import { isIgnoreWhitespace } from "$lib/diff/whitespace";
 
 export type Theme = "light" | "dark";
 export type FileView = "all" | "single";
@@ -75,6 +77,8 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
   let wrap = $state(resolveBool(storage, "wrap", false));
   let fullFile = $state(resolveBool(storage, "full-file", true));
   let commitsOpen = $state(resolveBool(storage, "commits-open", true));
+  const savedWhitespace = readMigrated(storage, "ignore-whitespace");
+  let ignoreWhitespace = $state<IgnoreWhitespace>(isIgnoreWhitespace(savedWhitespace) ? savedWhitespace : "none");
   const savedView = readMigrated(storage, "view");
   let fileView = $state<FileView>(savedView === "all" ? "all" : "single");
 
@@ -114,6 +118,11 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
     writeKey(storage, "commits-open", String(next));
   }
 
+  function setIgnoreWhitespace(next: IgnoreWhitespace): void {
+    ignoreWhitespace = next;
+    writeKey(storage, "ignore-whitespace", next);
+  }
+
   applyTheme(initialTheme);
 
   return {
@@ -142,6 +151,9 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
     get commitsOpen(): boolean {
       return commitsOpen;
     },
+    get ignoreWhitespace(): IgnoreWhitespace {
+      return ignoreWhitespace;
+    },
     get fileView(): FileView {
       return fileView;
     },
@@ -169,6 +181,7 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
     toggleCommitsOpen(): void {
       setCommitsOpen(!commitsOpen);
     },
+    setIgnoreWhitespace,
     get fileOrder(): FileOrder {
       return fileOrder;
     },

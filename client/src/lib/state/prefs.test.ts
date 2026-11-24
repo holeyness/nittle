@@ -40,8 +40,17 @@ describe("prefs store", () => {
     expect(prefs.wrap).toBe(false);
     expect(prefs.fullFile).toBe(true);
     expect(prefs.commitsOpen).toBe(true);
+    expect(prefs.ignoreWhitespace).toBe("none");
     expect(prefs.fileView).toBe("single");
     expect(prefs.fileOrder).toBe("tree");
+  });
+  it("persists ignoreWhitespace and falls back to 'none' on invalid values", () => {
+    const storage = fakeStorage();
+    createPrefsStore({ storage, matchMedia: media(false) }).setIgnoreWhitespace("all-and-empty");
+    expect(storage.data[`${PREFS_PREFIX}ignore-whitespace`]).toBe("all-and-empty");
+    expect(createPrefsStore({ storage, matchMedia: media(false) }).ignoreWhitespace).toBe("all-and-empty");
+    const junk = fakeStorage({ [`${PREFS_PREFIX}ignore-whitespace`]: "invalid" });
+    expect(createPrefsStore({ storage: junk, matchMedia: media(false) }).ignoreWhitespace).toBe("none");
   });
   it("persists the file order and ignores junk", () => {
     const storage = fakeStorage();

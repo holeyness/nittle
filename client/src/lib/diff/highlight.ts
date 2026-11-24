@@ -28,12 +28,19 @@ export function needsFileText(file: DiffFile): boolean {
   return deepest > 0 && deepest <= MAX_CONTEXT_LINES;
 }
 
-// highlighted html per diff line; empty when the language has no grammar.
-export async function highlightFile(file: DiffFile, newText: string | null): Promise<LineHtml> {
+export interface SideLineHtml {
+  html: LineHtml;
+  oldHtml: LineHtml;
+}
+
+// highlighted html per diff line for both sides; `oldHtml` holds old-side markup for
+// whitespace-ignored context lines whose old text differs from `line.content`.
+export async function highlightFileSides(file: DiffFile, newText: string | null): Promise<SideLineHtml> {
   const html: LineHtml = new Map();
+  const oldHtml: LineHtml = new Map();
   const lang = languageFor(file.path);
   const hl = lang ? await highlighterFor(lang) : null;
-  if (!lang || !hl) return html;
+  if (!lang || !hl) return { html, oldHtml };
 
   const source = newText?.split(/\r?\n/) ?? null;
   let state: GrammarState | undefined;
@@ -44,14 +51,23 @@ export async function highlightFile(file: DiffFile, newText: string | null): Pro
       state = stateAfter(hl, source.slice(consumed, start), lang, state);
       consumed = start;
     }
-    const oldSide = hunk.lines.filter((l) => l.type !== "addition");
-    const newSide = hunk.lines.filter((l) => l.type !== "deletion");
-    const old = highlightLines(hl, oldSide.map((l) => l.content), lang, state);
+    const oldSide = hunk.lines.filter((l) => l.type !== "addition" && (l.type === "deletion" || l.oldLine != null));
+    const newSide = hunk.lines.filter((l) => l.type !== "deletion" && (l.type === "addition" || l.newLine != null));
+    const old = highlightLines(hl, oldSide.map((l) => l.oldContent ?? l.content), lang, state);
     const next = highlightLines(hl, newSide.map((l) => l.content), lang, state);
-    oldSide.forEach((l, i) => l.type === "deletion" && html.set(l, old.lines[i] ?? ""));
+    oldSide.forEach((l, i) => {
+      const rendered = old.lines[i] ?? "";
+      if (l.type === "deletion" || l.newLine == null) html.set(l, rendered);
+      if (l.oldContent !== undefined) oldHtml.set(l, rendered);
+    });
     newSide.forEach((l, i) => html.set(l, next.lines[i] ?? ""));
     // without the file text, carry the state across hunks as a best effort.
     if (!source) state = newSide.length ? next.state : old.state;
   }
-  return html;
+  return { html, oldHtml };
+}
+
+// highlighted html per diff line; empty when the language has no grammar.
+export async function highlightFile(file: DiffFile, newText: string | null): Promise<LineHtml> {
+  return (await highlightFileSides(file, newText)).html;
 }

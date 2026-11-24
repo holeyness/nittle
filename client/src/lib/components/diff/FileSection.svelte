@@ -19,6 +19,7 @@
   } from "$lib/diff/fileMode";
   import { movedLookup } from "$lib/diff/movedLines";
   import { PLAIN_ANNOTATIONS, type DiffAnnotations } from "$lib/diff/annotations";
+  import { isWhitespaceOnlyResult, whitespaceEmptyBanner } from "$lib/diff/whitespace";
   import { createInterdiff } from "$lib/diff/interdiff.svelte";
   import { nearViewport } from "$lib/actions";
   import { FILE_LEVEL } from "$lib/state/cursorSteps";
@@ -64,9 +65,14 @@
     interdiffOn
       ? { ...PLAIN_ANNOTATIONS, readonly: true }
       : fileAnalysis
-        ? { whitespaceHunks: new Set(fileAnalysis.whitespaceOnlyHunks), moved: movedLookup(analysis.scorecard?.moved ?? [], file.path), readonly: false }
+        ? {
+            whitespaceHunks: prefs.ignoreWhitespace === "none" ? new Set(fileAnalysis.whitespaceOnlyHunks) : new Set(),
+            moved: movedLookup(analysis.scorecard?.moved ?? [], file.path),
+            readonly: false,
+          }
         : PLAIN_ANNOTATIONS,
   );
+  const whitespaceOnlyNotice = $derived(!interdiffOn && isWhitespaceOnlyResult(file, prefs.ignoreWhitespace));
 
   const isMd = $derived(canPreviewMarkdown(file) && !interdiffOn);
 
@@ -213,7 +219,18 @@
     {:else if file.binary}
       <p class="px-4 py-3 text-sm text-muted">Binary file — no textual diff.</p>
     {:else if shown.hunks.length === 0}
-      <p class="px-4 py-3 text-sm text-dim">No changes to display.</p>
+      {#if whitespaceOnlyNotice}
+        <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-muted" data-whitespace-only-banner>
+          <span>{whitespaceEmptyBanner(prefs.ignoreWhitespace)}</span>
+          <button
+            type="button"
+            class="rounded border border-border bg-surface-2 px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent"
+            onclick={() => prefs.setIgnoreWhitespace("none")}
+          >Show all differences</button>
+        </div>
+      {:else}
+        <p class="px-4 py-3 text-sm text-dim">No changes to display.</p>
+      {/if}
     {:else if giant && !loaded}
       <div class="flex items-center gap-3 px-4 py-3 text-sm text-muted">
         <span>Large diff — hidden to keep things fast.</span>
@@ -222,6 +239,16 @@
     {:else if !giant && !effectiveMounted}
       <div style="height:{estimatedHeight(shown)}px" use:nearViewport={() => (mounted = true)}></div>
     {:else}
+      {#if whitespaceOnlyNotice}
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-divider bg-surface-2/60 px-4 py-1.5 text-xs text-muted" data-whitespace-only-banner>
+          <span>{whitespaceEmptyBanner(prefs.ignoreWhitespace)}</span>
+          <button
+            type="button"
+            class="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent"
+            onclick={() => prefs.setIgnoreWhitespace("none")}
+          >Show all differences</button>
+        </div>
+      {/if}
       <div class="diff-scroll {useSplit ? 'split-scroll' : 'overflow-x-auto'} {prefs.wrap ? 'wrap' : ''}" use:revealRows>
         {#if useSplit}<SplitDiff file={shown} {annotations} />{:else}<UnifiedDiff file={shown} {annotations} />{/if}
       </div>

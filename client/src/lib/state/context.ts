@@ -53,7 +53,12 @@ function reviewIdFromUrl(): string | undefined {
 export function createAppState(reviewId = reviewIdFromUrl()): AppState {
   const prefs = createPrefsStore();
   const ui = createUiStore();
-  const diff = createDiffStore({ getDiff, switchTarget, full: () => prefs.fullFile });
+  const diff = createDiffStore({
+    getDiff,
+    switchTarget,
+    full: () => prefs.fullFile,
+    ignoreWhitespace: () => prefs.ignoreWhitespace,
+  });
   const review = createReviewStore(undefined, reviewId);
   const currentDiff = (): DiffResult | null => {
     const state = diff.state;

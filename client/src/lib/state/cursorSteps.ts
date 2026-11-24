@@ -54,7 +54,8 @@ function stopsOfView(view: FileView, fileIndex: number, pref: Side): Stop[] {
       const side: Side = view.split ? pref : l.newLine != null ? "new" : "old";
       const line = side === "new" ? l.newLine : l.oldLine;
       if (line == null) continue;
-      out.push({ path: view.file.path, fileIndex, side, line, oldLine: l.oldLine, newLine: l.newLine, content: l.content, hunkStart });
+      const content = side === "old" && l.oldContent !== undefined ? l.oldContent : l.content;
+      out.push({ path: view.file.path, fileIndex, side, line, oldLine: l.oldLine, newLine: l.newLine, content, hunkStart });
       hunkStart = false;
     }
   }
