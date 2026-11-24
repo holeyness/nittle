@@ -8,7 +8,8 @@
   // the input takes the arrows and Enter; after Enter the list has focus and takes j, k, the
   // arrows and Enter, so a reader can step through hits without leaving the keyboard. Esc is
   // handled by the keymap (one layer per press).
-  const { searchAll: search } = getAppState();
+  const { searchAll: search, diff } = getAppState();
+  const diffPaths = $derived(new Set(diff.files.flatMap((f) => (f.oldPath ? [f.path, f.oldPath] : [f.path]))));
   let input: HTMLInputElement | undefined = $state();
   let list: HTMLDivElement | undefined = $state();
 
@@ -88,13 +89,23 @@
         type="text"
         class="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm text-text placeholder:text-dim focus:border-focus sm:max-w-sm"
         aria-label="Search all changed files"
-        placeholder="Search all changed files…"
+        placeholder={search.scope === "repo" ? "Search entire repository…" : "Search all changed files…"}
         autocomplete="off"
         spellcheck="false"
         value={search.query}
         oninput={(event) => search.setQuery(event.currentTarget.value)}
         onkeydown={onInputKeydown}
       />
+      <div class="flex rounded-md border border-border p-0.5 text-xs" role="group" aria-label="Search scope">
+        {#each [["diff", "Changed files"], ["repo", "Whole repo"]] as const as [value, label]}
+          <button
+            type="button"
+            class="rounded px-2 py-0.5 {search.scope === value ? 'bg-surface-2 font-medium text-accent' : 'text-muted hover:text-text'}"
+            aria-pressed={search.scope === value}
+            onclick={() => search.setScope(value)}
+          >{label}</button>
+        {/each}
+      </div>
       <button
         type="button"
         class="rounded border border-border px-1.5 py-0.5 font-mono text-xs {search.regex ? 'bg-surface-2 text-accent' : 'text-muted hover:text-text'}"
@@ -126,7 +137,12 @@
         data-search-results
       >
         {#each groups as group (group.path + group.rows[0]?.index)}
-          <div class="px-4 pb-0.5 pt-2 font-mono text-xs text-muted" data-search-group>{group.path}</div>
+          <div class="flex items-center gap-2 px-4 pb-0.5 pt-2 font-mono text-xs text-muted" data-search-group>
+            <span>{group.path}</span>
+            {#if search.scope === "repo" && diffPaths.has(group.path)}
+              <span class="rounded bg-accent/15 px-1.5 py-px text-[10px] text-accent">in diff</span>
+            {/if}
+          </div>
           {#each group.rows as { hit, index } (index)}
             <!-- keys are handled once, by the listbox -->
             <!-- svelte-ignore a11y_click_events_have_key_events -->

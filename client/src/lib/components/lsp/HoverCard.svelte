@@ -54,5 +54,17 @@
     <div bind:this={body} class="hover-doc">
       {#key card.key}<Markdown text={card.contents} />{/key}
     </div>
+    <div class="mt-2 flex items-center gap-1.5 border-t border-divider pt-1.5">
+      <button
+        type="button"
+        class="rounded border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-text hover:border-accent hover:text-accent"
+        onclick={() => lsp.definitionAtHit(card.hit)}
+      >Go to Definition</button>
+      <button
+        type="button"
+        class="rounded border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-text hover:border-accent hover:text-accent"
+        onclick={() => lsp.referencesAtHit(card.hit)}
+      >Find References</button>
+    </div>
   </div>
 {/if}

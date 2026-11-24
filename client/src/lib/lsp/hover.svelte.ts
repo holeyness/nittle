@@ -14,6 +14,7 @@ export const HOVER_GRACE_MS = 250;
 export interface HoverCard {
   contents: string; // markdown
   key: string;
+  hit: CodeHit;
   anchor: { left: number; top: number; bottom: number; right: number }; // the word, in viewport px
 }
 
@@ -49,7 +50,7 @@ export function createHoverStore(deps: HoverDeps) {
     onResult: (hit, response) => {
       const anchor = anchorOf(hit);
       if (!response.contents.trim() || !anchor) return;
-      card = { contents: response.contents, key: keyOf(hit), anchor };
+      card = { contents: response.contents, key: keyOf(hit), hit, anchor };
     },
     onError: (hit, error) => deps.onError?.(error, explicit, hit),
   });

@@ -1,8 +1,8 @@
-// cross-file search (g/): the query, a debounced fetch of /api/search that a newer query aborts,
-// the hits, and which one is selected. picking a hit hands it to the cursor (a recorded jump).
+// cross-file & whole-repo search (g/ and Cmd+Shift+F): debounced fetch of /api/search
+// with scope switching between changed files and the entire repository.
 
 import type { SearchHit } from "$types";
-import { searchAllFiles } from "$lib/api/search";
+import { searchAllFiles, type SearchScope } from "$lib/api/search";
 
 export const SEARCH_DEBOUNCE_MS = 200;
 
@@ -10,7 +10,7 @@ export type SearchAllStatus = "idle" | "loading" | "ready" | "error";
 
 export interface SearchAllDeps {
   jump: (hit: SearchHit) => void;
-  fetchHits?: typeof searchAllFiles;
+  fetchHits?: (query: string, regex: boolean, signal?: AbortSignal, scope?: SearchScope) => Promise<{ results: SearchHit[]; truncated: boolean }>;
   debounceMs?: number;
 }
 
@@ -22,6 +22,7 @@ export function createSearchAllStore(deps: SearchAllDeps) {
   let open = $state(false);
   let query = $state("");
   let regex = $state(false);
+  let scope = $state<SearchScope>("diff");
   let status = $state<SearchAllStatus>("idle");
   let hits = $state.raw<SearchHit[]>([]);
   let truncated = $state(false);
@@ -52,7 +53,10 @@ export function createSearchAllStore(deps: SearchAllDeps) {
     inflight = controller;
     status = "loading";
     try {
-      const response = await fetchHits(query, regex, controller.signal);
+      const response =
+        scope === "repo"
+          ? await fetchHits(query, regex, controller.signal, scope)
+          : await fetchHits(query, regex, controller.signal);
       if (inflight !== controller) return;
       hits = response.results;
       truncated = response.truncated;
@@ -91,6 +95,9 @@ export function createSearchAllStore(deps: SearchAllDeps) {
     get regex(): boolean {
       return regex;
     },
+    get scope(): SearchScope {
+      return scope;
+    },
     get status(): SearchAllStatus {
       return status;
     },
@@ -110,11 +117,19 @@ export function createSearchAllStore(deps: SearchAllDeps) {
       return focusSeq;
     },
 
-    // g/: open the panel with the last query still in place
-    start(): void {
+    // open the panel with the last query still in place; optionally switch scope ("diff" | "repo")
+    start(nextScope?: SearchScope): void {
+      const scopeChanged = nextScope !== undefined && nextScope !== scope;
+      if (nextScope) scope = nextScope;
       open = true;
       focusSeq++;
-      if (status === "idle" && query.trim() !== "") schedule();
+      if ((status === "idle" || scopeChanged) && query.trim() !== "") schedule();
+    },
+    setScope(next: SearchScope): void {
+      if (scope === next) return;
+      scope = next;
+      if (query.trim() !== "") schedule();
+      else reset();
     },
     setQuery(next: string): void {
       query = next;

@@ -57,8 +57,10 @@ function resolveNumber(storage: StorageLike, name: string, fallback: number): nu
   return Number.isFinite(value) ? value : fallback;
 }
 
-function resolveBool(storage: StorageLike, name: string): boolean {
-  return readMigrated(storage, name) === "true";
+function resolveBool(storage: StorageLike, name: string, fallback = false): boolean {
+  const raw = readMigrated(storage, name);
+  if (raw === null) return fallback;
+  return raw === "true";
 }
 
 export function createPrefsStore(deps: PrefsDeps = {}) {
@@ -68,10 +70,13 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
   const initialTheme = resolveTheme(storage, matchMedia);
   let theme = $state<Theme>(initialTheme);
   let sidebarWidth = $state(resolveNumber(storage, "sidebar", DEFAULT_SIDEBAR));
-  let split = $state(resolveBool(storage, "split"));
+  let split = $state(resolveBool(storage, "split", true));
   let splitRatio = $state(clampSplitRatio(resolveNumber(storage, "split-ratio", DEFAULT_SPLIT_RATIO)));
-  let wrap = $state(resolveBool(storage, "wrap"));
-  let fileView = $state<FileView>(readMigrated(storage, "view") === "single" ? "single" : "all");
+  let wrap = $state(resolveBool(storage, "wrap", false));
+  let fullFile = $state(resolveBool(storage, "full-file", true));
+  let commitsOpen = $state(resolveBool(storage, "commits-open", true));
+  const savedView = readMigrated(storage, "view");
+  let fileView = $state<FileView>(savedView === "all" ? "all" : "single");
 
   let fileOrder = $state<FileOrder>(readMigrated(storage, "file-order") === "review" ? "review" : "tree");
 
@@ -99,6 +104,16 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
     writeKey(storage, "wrap", String(next));
   }
 
+  function setFullFile(next: boolean): void {
+    fullFile = next;
+    writeKey(storage, "full-file", String(next));
+  }
+
+  function setCommitsOpen(next: boolean): void {
+    commitsOpen = next;
+    writeKey(storage, "commits-open", String(next));
+  }
+
   applyTheme(initialTheme);
 
   return {
@@ -121,6 +136,12 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
     get wrap(): boolean {
       return wrap;
     },
+    get fullFile(): boolean {
+      return fullFile;
+    },
+    get commitsOpen(): boolean {
+      return commitsOpen;
+    },
     get fileView(): FileView {
       return fileView;
     },
@@ -139,6 +160,14 @@ export function createPrefsStore(deps: PrefsDeps = {}) {
     setWrap,
     toggleWrap(): void {
       setWrap(!wrap);
+    },
+    setFullFile,
+    toggleFullFile(): void {
+      setFullFile(!fullFile);
+    },
+    setCommitsOpen,
+    toggleCommitsOpen(): void {
+      setCommitsOpen(!commitsOpen);
     },
     get fileOrder(): FileOrder {
       return fileOrder;

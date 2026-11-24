@@ -28,10 +28,15 @@ export interface LspDeps {
   markJump: () => void; // remember the cursor before leaving it for the viewer
   // move the line cursor onto a clicked row (no jump recorded), so a jump from it remembers that row
   placeCursor?: (hit: CodeHit) => void;
+  currentDiffPos?: () => { path: string; side: "old" | "new"; line: number } | null;
   closeSearch: () => void; // the search docks share the strip under the top bar
   // where the reader is (cursor moves, file selection): a definition answer is stale once it changes
   stamp?: () => readonly unknown[];
 }
+
+export type NavEntry =
+  | { kind: "diff"; path: string; side: "old" | "new"; line: number }
+  | { kind: "viewer"; target: JumpTarget };
 
 export type Tone = "info" | "error";
 export interface Notice { text: string; tone: Tone; seq: number }
@@ -54,6 +59,9 @@ export function createLspStore(deps: LspDeps) {
   let navigation: AbortController | undefined;
   let viewerLoad: AbortController | undefined;
   let trail: JumpTarget[] = []; // viewers the reader hopped away from, newest last
+  let backStack = $state.raw<NavEntry[]>([]);
+  let forwardStack = $state.raw<NavEntry[]>([]);
+  let browserSeq = 0;
 
   function notify(text: string, tone: Tone = "info"): void {
     clearTimeout(noticeTimer);
@@ -77,6 +85,44 @@ export function createLspStore(deps: LspDeps) {
 
   // the same place: path-less targets compare by absolute path
   const sameTarget = (a: JumpTarget, b: JumpTarget): boolean => a.absolutePath === b.absolutePath && a.line === b.line && a.side === b.side;
+  const sameEntry = (a: NavEntry, b: NavEntry): boolean => {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === "viewer" && b.kind === "viewer") return sameTarget(a.target, b.target);
+    if (a.kind === "diff" && b.kind === "diff") return a.path === b.path && a.side === b.side && a.line === b.line;
+    return false;
+  };
+
+  function captureCurrent(originHit?: CodeHit | null): NavEntry | null {
+    if (viewer) return { kind: "viewer", target: viewer.target };
+    if (originHit) return { kind: "diff", path: originHit.path, side: originHit.side, line: originHit.line };
+    const pos = deps.currentDiffPos?.();
+    if (pos && pos.line > 0) return { kind: "diff", path: pos.path, side: pos.side, line: pos.line };
+    if (pos) return { kind: "diff", path: pos.path, side: pos.side, line: 1 };
+    return null;
+  }
+
+  function pushBrowserState(): void {
+    try {
+      if (typeof window !== "undefined" && typeof window.history?.pushState === "function") {
+        window.history.pushState({ nittleNav: ++browserSeq }, "");
+      }
+    } catch {
+      // restricted history contexts (e.g. opaque origins)
+    }
+  }
+
+  function restoreEntry(entry: NavEntry): void {
+    cancelNavigation();
+    hover.close();
+    if (entry.kind === "viewer") {
+      void showViewer(entry.target);
+      return;
+    }
+    viewerLoad?.abort();
+    viewer = null;
+    trail = [];
+    deps.goToHit({ path: entry.path, side: entry.side, line: entry.line, preview: "", ranges: [] });
+  }
 
   // `from` is the viewer this jump left: the hop goes on the trail, and the cursor was already
   // remembered when the viewer first opened. without it the reader is coming from the diff.
@@ -119,14 +165,23 @@ export function createLspStore(deps: LspDeps) {
     return wasOpen;
   }
 
-  function jump(target: JumpTarget): void {
+  function jump(target: JumpTarget, originHit?: CodeHit | null): void {
     cancelNavigation();
     viewerLoad?.abort();
     const from = viewer?.target ?? null;
+    const origin = captureCurrent(originHit);
     viewer = null;
     const landed = jumpTo({ files: deps.files, toDiff: deps.goToHit, toViewer: (t) => void openViewer(t, from) }, target);
     // the cursor history already holds where the reader started; viewer hops end where the diff begins
     if (landed === "diff") trail = [];
+    if (origin) {
+      const top = backStack[backStack.length - 1];
+      if (!top || !sameEntry(top, origin)) {
+        backStack = [...backStack, origin].slice(-JUMP_HISTORY_CAP);
+      }
+      forwardStack = [];
+      pushBrowserState();
+    }
   }
 
   // Ctrl+o inside the viewer: one hop back along the trail. false when there is none, with the
@@ -141,6 +196,54 @@ export function createLspStore(deps: LspDeps) {
     trail = trail.slice(0, -1);
     void showViewer(previous);
     return true;
+  }
+
+  function navBack(): boolean {
+    if (backStack.length === 0) return viewerBack();
+    const prev = backStack[backStack.length - 1]!;
+    const current = captureCurrent();
+    backStack = backStack.slice(0, -1);
+    if (current) {
+      const topFwd = forwardStack[forwardStack.length - 1];
+      if (!topFwd || !sameEntry(topFwd, current)) {
+        forwardStack = [...forwardStack, current].slice(-JUMP_HISTORY_CAP);
+      }
+    }
+    if (prev.kind === "viewer" && trail.length > 0) trail = trail.slice(0, -1);
+    restoreEntry(prev);
+    return true;
+  }
+
+  function navForward(): boolean {
+    if (forwardStack.length === 0) return false;
+    const next = forwardStack[forwardStack.length - 1]!;
+    const current = captureCurrent();
+    forwardStack = forwardStack.slice(0, -1);
+    if (current) {
+      const topBack = backStack[backStack.length - 1];
+      if (!topBack || !sameEntry(topBack, current)) {
+        backStack = [...backStack, current].slice(-JUMP_HISTORY_CAP);
+      }
+    }
+    restoreEntry(next);
+    return true;
+  }
+
+  function handlePopState(state: unknown): void {
+    const seq = typeof (state as { nittleNav?: unknown })?.nittleNav === "number" ? (state as { nittleNav: number }).nittleNav : 0;
+    if (seq < browserSeq) {
+      browserSeq = seq;
+      navBack();
+    } else if (seq > browserSeq) {
+      browserSeq = seq;
+      navForward();
+    }
+  }
+
+  function clearHistory(): void {
+    backStack = [];
+    forwardStack = [];
+    trail = [];
   }
 
   // files no language server answers for: resting the pointer on them stops asking
@@ -188,7 +291,7 @@ export function createLspStore(deps: LspDeps) {
     if (response.onDefinition && kind === "definition") return openReferences(hit);
     if (response.targets.length === 0) return notify(`No ${kind === "typeDefinition" ? "type definition" : "definition"} found for ${hit.token.text}.`);
     hover.close();
-    if (response.targets.length === 1) return jump(targetOf(response.targets[0]!, response.targets[0]!.range));
+    if (response.targets.length === 1) return jump(targetOf(response.targets[0]!, response.targets[0]!.range), hit);
     picker = { title: `${kind === "typeDefinition" ? "Type definitions" : "Definitions"} of ${hit.token.text}`, targets: response.targets, selected: 0 };
   }
 
@@ -246,6 +349,10 @@ export function createLspStore(deps: LspDeps) {
       const hit = atCursor();
       if (hit) openReferences(hit);
     },
+    referencesAtHit(hit: CodeHit): void {
+      if (!viewer) deps.placeCursor?.(hit);
+      openReferences(hit);
+    },
     openDocumentSymbols(path: string | undefined): void {
       if (!path) return notify(NO_WORD_NOTICE);
       cancelNavigation();
@@ -274,6 +381,16 @@ export function createLspStore(deps: LspDeps) {
     },
     jump,
     viewerBack,
+    navBack,
+    navForward,
+    handlePopState,
+    clearHistory,
+    get canGoBack(): boolean {
+      return backStack.length > 0 || viewer !== null;
+    },
+    get canGoForward(): boolean {
+      return forwardStack.length > 0;
+    },
     cancelNavigation,
     // any code-navigation layer is open (Esc closes it before visual mode ends)
     get hasLayer(): boolean {

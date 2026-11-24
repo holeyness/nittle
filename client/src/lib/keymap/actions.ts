@@ -35,12 +35,12 @@ export function createActions({ app, currentPath, halfPageRows }: ActionEnv): Pa
     "page.up": (c) => cursor.page(currentPath(), () => pagePosition(-1, n(c)), -halfPageRows() * n(c)),
     "side.old": () => cursor.switchTo(currentPath(), "old"),
     "side.new": () => cursor.switchTo(currentPath(), "new"),
-    // the viewer is not a cursor position: going back steps out through its own hops first, then
-    // closes it and returns to the cursor
+    // step through definition/viewer navigation history first, then fall back to cursor jump history
     "jump.back": () => {
-      if (!lsp.viewerBack()) cursor.back(currentPath());
+      if (!lsp.navBack()) cursor.back(currentPath());
     },
     "jump.forward": () => {
+      if (lsp.navForward()) return;
       lsp.cancelNavigation();
       lsp.closeViewer();
       cursor.forward(currentPath());

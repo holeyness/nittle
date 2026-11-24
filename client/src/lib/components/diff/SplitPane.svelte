@@ -29,9 +29,10 @@
   }
 
   let { file, rows, side, id, highlighted, annotations = PLAIN_ANNOTATIONS }: Props = $props();
-  const { ui, comments, cursor, search } = getAppState();
+  const { ui, comments, cursor, search, prefs } = getAppState();
   const here = $derived(cursor.posFor(file.path));
   const fileComments = $derived(comments.comments.filter((comment) => comment.file === file.path));
+  const hideFullFileHeader = $derived(prefs.fullFile && file.hunks.length === 1);
 
   function keyboardComment(event: MouseEvent, number: number): void {
     if (event.detail !== 0) return;
@@ -84,9 +85,11 @@
   <div class="split-label">{side === "old" ? "Old" : "New"}</div>
   {#each rows as row (row.key)}
     {#if row.kind === "header"}
-      <div class="split-hunk" title={row.text}>
-        {row.text}{#if annotations.whitespaceHunks.has(hunkOfRowKey(row.key))}<span class="ws-label">whitespace only</span>{/if}
-      </div>
+      {#if !hideFullFileHeader}
+        <div class="split-hunk" title={row.text}>
+          {row.text}{#if annotations.whitespaceHunks.has(hunkOfRowKey(row.key))}<span class="ws-label">whitespace only</span>{/if}
+        </div>
+      {/if}
     {:else if row.kind === "code"}
       {@const line = side === "old" ? row.pair.left : row.pair.right}
       {@const number = (side === "old" ? line?.oldLine : line?.newLine) ?? null}

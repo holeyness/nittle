@@ -73,7 +73,9 @@
   const badge = $derived(changeBadge(file.changeType));
   const fileLevel = $derived(fileComments(comments.comments.filter((c) => c.file === file.path)));
   const addingFile = $derived(ui.adding?.file === file.path && ui.adding.line == null);
-  const giant = $derived(lineCountOf(shown) > GIANT_FILE_LINES);
+  const giantThreshold = $derived(prefs.fullFile && prefs.fileView === "single" ? 15000 : GIANT_FILE_LINES);
+  const giant = $derived(lineCountOf(shown) > giantThreshold);
+  const effectiveMounted = $derived(mounted || prefs.fileView === "single");
   const canToggleSplit = $derived(canOverrideFileSplit(file, diff.meta?.mode));
   const useSplit = $derived(resolveFileSplit(splitState, file, diff.meta?.mode));
 
@@ -217,7 +219,7 @@
         <span>Large diff — hidden to keep things fast.</span>
         <button class="rounded border border-border px-2 py-1 text-xs text-text hover:bg-surface-2" onclick={() => (loaded = true)}>Load diff</button>
       </div>
-    {:else if !giant && !mounted}
+    {:else if !giant && !effectiveMounted}
       <div style="height:{estimatedHeight(shown)}px" use:nearViewport={() => (mounted = true)}></div>
     {:else}
       <div class="diff-scroll {useSplit ? 'split-scroll' : 'overflow-x-auto'} {prefs.wrap ? 'wrap' : ''}" use:revealRows>

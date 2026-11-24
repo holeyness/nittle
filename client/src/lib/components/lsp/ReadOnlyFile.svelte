@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import Lock from "@lucide/svelte/icons/lock";
   import X from "@lucide/svelte/icons/x";
   import { tick } from "svelte";
@@ -87,7 +89,22 @@
     onkeydown={onKeydown}
     onclick={onClick}
   >
-    <header class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border bg-surface-2 px-4 py-2">
+    <header class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-surface-2 px-4 py-2">
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded border border-border bg-surface px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent"
+          title="Back (⌥⌘← / Ctrl+o / browser Back)"
+          onclick={() => lsp.navBack()}
+        ><ArrowLeft size={13} />Back</button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded border border-border bg-surface px-2 py-0.5 text-xs text-text hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!lsp.canGoForward}
+          title="Forward (⌥⌘→ / Ctrl+i / browser Forward)"
+          onclick={() => lsp.navForward()}
+        >Forward<ArrowRight size={13} /></button>
+      </div>
       <span class="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted"><Lock size={11} />read-only</span>
       <span class="min-w-0 truncate font-mono text-sm text-text" title={viewer.target.absolutePath} data-viewer-path>{shownPath}</span>
       {#if !viewer.target.inRepo}<span class="text-xs text-muted" data-outside-repo>outside the repository</span>{/if}

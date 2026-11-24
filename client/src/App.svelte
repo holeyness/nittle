@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { createAppState, setAppState } from "$lib/state/context";
   import TopBar from "$lib/components/TopBar.svelte";
+  import DiffNavBar from "$lib/components/DiffNavBar.svelte";
   import Mark from "$lib/components/Mark.svelte";
   import CommitHeader from "$lib/components/CommitHeader.svelte";
   import FileIndex from "$lib/components/FileIndex.svelte";
@@ -45,6 +46,7 @@
 
   onMount(() => {
     void diff.load();
+    void app.history.load();
     void app.review.load();
     void app.drafts.load();
     app.review.startPolling();
@@ -65,13 +67,16 @@
       if (event.persisted) app.connection.verify();
     };
     const onPageHide = () => void app.drafts.flush(true);
+    const onPopState = (event: PopStateEvent) => app.lsp.handlePopState(event.state);
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("popstate", onPopState);
     return () => {
       app.review.stopPolling();
       unlink();
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("popstate", onPopState);
       setMutationBlock(() => null);
       app.connection.dispose();
     };
@@ -102,6 +107,7 @@
       {/if}
       <FileIndex />
       <div class="relative flex min-w-0 flex-1 flex-col">
+        <DiffNavBar />
         <section data-diff-pane use:lspPointer={app.lsp} data-lsp-old-off={app.lsp.removedSideHint ? "" : undefined} tabindex="-1" class="min-h-0 flex-1 overflow-auto outline-none">
           {#if diff.meta?.commit}<CommitHeader commit={diff.meta.commit} />{/if}
           <DiffView />

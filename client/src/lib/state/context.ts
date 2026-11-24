@@ -3,6 +3,8 @@ import type { DiffResult } from "$types";
 import { createPrefsStore, type PrefsStore } from "./prefs.svelte";
 import { createUiStore, type UiStore } from "./ui.svelte";
 import { createDiffStore, type DiffStore } from "./diff.svelte";
+import { createHistoryStore, getHistory, type HistoryStore } from "./history.svelte";
+import { getDiff, switchTarget } from "$lib/api/diff";
 import { createReviewStore, type ReviewStore } from "./review.svelte";
 import { createCommentsStore, type CommentsStore } from "./comments.svelte";
 import { createDraftsStore, type DraftsStore } from "./drafts.svelte";
@@ -26,6 +28,7 @@ export interface AppState {
   prefs: PrefsStore;
   ui: UiStore;
   diff: DiffStore;
+  history: HistoryStore;
   review: ReviewStore;
   comments: CommentsStore;
   drafts: DraftsStore;
@@ -50,7 +53,7 @@ function reviewIdFromUrl(): string | undefined {
 export function createAppState(reviewId = reviewIdFromUrl()): AppState {
   const prefs = createPrefsStore();
   const ui = createUiStore();
-  const diff = createDiffStore();
+  const diff = createDiffStore({ getDiff, switchTarget, full: () => prefs.fullFile });
   const review = createReviewStore(undefined, reviewId);
   const currentDiff = (): DiffResult | null => {
     const state = diff.state;
@@ -72,16 +75,31 @@ export function createAppState(reviewId = reviewIdFromUrl()): AppState {
     cursorPos: () => cursor.pos,
     goToLine: cursor.goToLine,
   });
-  const searchAll = createSearchAllStore({ jump: cursor.goToHit });
   const lsp = createLspStore({
     files: () => diff.files,
     goToHit: cursor.goToHit,
     markJump: () => cursor.markJump(undefined),
     placeCursor: (hit) => void cursor.placeAt(hit.path, hit.side, hit.line),
+    currentDiffPos: () => {
+      if (cursor.pos) return cursor.pos;
+      const path = ui.activeFile ?? diff.files[0]?.path;
+      return path ? { path, side: "new", line: 1 } : null;
+    },
     stamp: () => navigationStamp(cursor, ui),
     closeSearch: () => {
       search.close();
       searchAll.close();
+    },
+  });
+  const searchAll = createSearchAllStore({
+    jump: (hit) => {
+      const inDiff = diff.files.some((f) => f.path === hit.path || f.oldPath === hit.path);
+      if (inDiff) {
+        lsp.closeViewer();
+        cursor.goToHit(hit);
+      } else {
+        lsp.jump({ path: hit.path, absolutePath: hit.path, inRepo: true, side: hit.side, line: hit.line, character: hit.ranges[0]?.[0] ?? 0 });
+      }
     },
   });
   const commentFocus = createCommentFocus({ comments: () => comments.anchored, pos: () => visibleCursor(cursor.pos, ui.activeFile) });
@@ -96,7 +114,19 @@ export function createAppState(reviewId = reviewIdFromUrl()): AppState {
       void drafts.flush();
     },
   });
-  return { prefs, ui, diff, review, comments, drafts, analysis, cursor, search, searchAll, lsp, connection, commentFocus, filePicker };
+  const history = createHistoryStore({
+    fetchHistory: getHistory,
+    switchTarget: (spec) => diff.switchTarget(spec),
+    onSwitched: () => {
+      lsp.closeViewer();
+      lsp.clearHistory();
+      lsp.hover.close();
+      lsp.references.close();
+      const first = diff.files[0];
+      if (first) ui.selectFile(first.path);
+    },
+  });
+  return { prefs, ui, diff, history, review, comments, drafts, analysis, cursor, search, searchAll, lsp, connection, commentFocus, filePicker };
 }
 
 // for leaf components that also render without an app root (unit tests).

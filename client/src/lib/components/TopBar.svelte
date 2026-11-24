@@ -1,5 +1,6 @@
 <script lang="ts">
   import PanelLeft from "@lucide/svelte/icons/panel-left";
+  import Search from "@lucide/svelte/icons/search";
   import Mark from "./Mark.svelte";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Moon from "@lucide/svelte/icons/moon";
@@ -18,7 +19,7 @@
   import ReviewPanel from "./review/ReviewPanel.svelte";
   import UpdateBadge from "./UpdateBadge.svelte";
 
-  const { diff, prefs, ui, analysis } = getAppState();
+  const { diff, prefs, ui, analysis, search, searchAll, lsp } = getAppState();
   const scoreBand = $derived(analysis.scorecard ? worstBand(analysis.scorecard.categories.map((c) => c.band)) : null);
 
   const fileCount = $derived(`${diff.files.length} ${diff.files.length === 1 ? "file" : "files"}`);
@@ -57,6 +58,21 @@
   </span>
 
   <div class="flex w-full shrink-0 items-center justify-end gap-1 min-[701px]:w-auto">
+    <button
+      type="button"
+      class="inline-flex items-center gap-1.5 rounded border border-border bg-surface-2 px-2 py-1 text-xs text-muted hover:border-accent hover:text-text"
+      title="Search repository (⌘⇧F)"
+      aria-label="Global search"
+      onclick={() => {
+        search.close();
+        lsp.references.close();
+        searchAll.start("repo");
+      }}
+    >
+      <Search size={13} />
+      <span class="hidden sm:inline">Search</span>
+      <kbd class="hidden font-mono text-[10px] text-dim md:inline">⌘⇧F</kbd>
+    </button>
     <UpdateBadge />
     {#if analysis.scorecard && scoreBand}
       <button

@@ -16,9 +16,10 @@
   import CommentEditor from "../comment/CommentEditor.svelte";
 
   let { file, annotations = PLAIN_ANNOTATIONS }: { file: DiffFile; annotations?: DiffAnnotations } = $props();
-  const { ui, comments, cursor, search } = getAppState();
+  const { ui, comments, cursor, search, prefs } = getAppState();
   const here = $derived(cursor.posFor(file.path));
   const highlighted = createFileHighlight(() => file);
+  const hideFullFileHeader = $derived(prefs.fullFile && file.hunks.length === 1);
 
   const SIGN: Record<DiffLine["type"], string> = { addition: "+", deletion: "−", context: " " };
   const fileComments = $derived(comments.comments.filter((c) => c.file === file.path));
@@ -57,7 +58,7 @@
     {@const marks = hunkMarks(hunk.lines)}
     {@const whitespaceOnly = annotations.whitespaceHunks.has(hi)}
     <tbody class:ws-only={whitespaceOnly}>
-      {#if hunk.header || whitespaceOnly}
+      {#if (hunk.header || whitespaceOnly) && !hideFullFileHeader}
         <tr class="hunk-header"><td colspan="4">{hunk.header}{#if whitespaceOnly}<span class="ws-label">whitespace only</span>{/if}</td></tr>
       {/if}
       {#each hunk.lines as line, li (li)}
