@@ -36,6 +36,17 @@ export interface DiffMeta {
   source: string; // the "new" side label, e.g. "working tree" or "feature/x"
   target: string; // the "base" side label, e.g. "main"
   commit?: CommitInfo; // present when the target is a single commit (`nittle show`)
+  pr?: PrInfo; // present when reviewing a GitHub pull request (`nittle pr`)
+}
+
+export interface PrInfo {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  state: string;
+  baseRef: string;
+  headRef: string;
 }
 
 // the commit under review, shown above the files

@@ -18,6 +18,7 @@ export interface ClickModifiers {
 
 export function createHistoryStore(deps: HistoryDeps) {
   let data = $state.raw<HistoryResponse | null>(null);
+  let initialSpec = $state<string | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let selectedHashes = $state<string[]>([]);
@@ -71,7 +72,9 @@ export function createHistoryStore(deps: HistoryDeps) {
       loading = true;
       error = null;
       try {
-        data = await deps.fetchHistory(limit, inflight.signal);
+        const fetched = await deps.fetchHistory(limit, inflight.signal);
+        data = fetched;
+        if (!initialSpec && fetched.activeSpec) initialSpec = fetched.activeSpec;
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         // ignore missing history route in minimal test harnesses
@@ -80,6 +83,15 @@ export function createHistoryStore(deps: HistoryDeps) {
       } finally {
         loading = false;
       }
+    },
+    get initialSpec(): string | null {
+      return initialSpec;
+    },
+    async selectInitial(): Promise<void> {
+      if (!initialSpec) return;
+      selectedHashes = commits.filter((c) => c.onStack).map((c) => c.hash);
+      anchorIndex = selectedHashes.length > 0 ? 0 : null;
+      await applySpec(initialSpec, "all PR changes", "pr-all");
     },
     async selectWorking(): Promise<void> {
       selectedHashes = [];

@@ -1,7 +1,7 @@
 import type { Server } from "bun";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import type { DiffResult, ReviewOrigin, ReviewPolicy, ReviewRecord } from "../types";
+import type { DiffResult, PrInfo, ReviewOrigin, ReviewPolicy, ReviewRecord } from "../types";
 import { openBrowser } from "../utils/browser";
 import { createServer, type ServerContext } from "../server/router";
 import { resolveClientAssets } from "./standalone";
@@ -31,6 +31,8 @@ export interface ReviewLaunchInput {
   lsp?: boolean; // false (--no-lsp) never starts a language server
   lspOverrides?: LspOverrides; // --lsp <lang>=<command>: this run only, over the stored overrides
   lspPool?: LspPool; // replaces the default pool; tests inject a fake-backed one
+  pr?: PrInfo; // GitHub PR metadata when launched via `nittle pr`
+  refLabelOverride?: string; // friendlier top-bar label (e.g. PR #123 · head → base)
   host: SessionHost;
 }
 
@@ -49,6 +51,10 @@ export function launchReview(input: ReviewLaunchInput): ReviewLaunch {
   const cwd = resolve(existing?.target.cwd ?? input.cwd);
   const spec = existing?.target.spec ?? input.spec;
   const loaded = loadReviewTarget(cwd, spec, input.scope, false);
+  if (input.pr) {
+    loaded.meta = { ...(loaded.meta ?? { repo: "", mode: "branch", source: input.pr.headRef, target: input.pr.baseRef }), pr: input.pr };
+    loaded.diff = { ...loaded.diff, ref: input.refLabelOverride ?? loaded.diff.ref, meta: loaded.meta };
+  }
   if (!existing && input.requireChanges && loaded.diff.files.length === 0) {
     throw new Error(`No changes found for "${loaded.diff.ref}". Use ref "working" for current tracked and untracked changes, or verify the requested comparison.`);
   }
@@ -63,7 +69,21 @@ export function launchReview(input: ReviewLaunchInput): ReviewLaunch {
   const assets = resolveClientAssets(input.productRoot);
   const sessionId = randomUUID();
   const lsp = input.lspPool ?? createLspPool(cwd, input.lsp !== false, input.lspOverrides);
-  const ctx: ServerContext = { ...loaded, cwd, assets, productRoot: input.productRoot, served: false, activeSpec: storedSpec, reviewId: review.id, host: input.host, sessionId, presence: createPresence(), lsp };
+  const ctx: ServerContext = {
+    ...loaded,
+    cwd,
+    assets,
+    productRoot: input.productRoot,
+    served: false,
+    activeSpec: storedSpec,
+    historyTipRef: loaded.newRef,
+    historyBaseRef: loaded.meta?.target ?? null,
+    reviewId: review.id,
+    host: input.host,
+    sessionId,
+    presence: createPresence(),
+    lsp,
+  };
   const server = createServer(ctx, input.port ?? 0);
   const port = server.port ?? 0;
   const origin = `http://${LOOPBACK_BIND_HOST}:${port}`;

@@ -60,22 +60,23 @@ function readLocalBranches(cwd: string): Map<string, string[]> {
   return byHash;
 }
 
-// detects local branches stacked between merge-base(HEAD, defaultBranch) and HEAD.
+// detects local branches stacked between merge-base(tipRef, defaultBranch) and tipRef.
 function detectStack(
   cwd: string,
-  head: string | null,
+  tipHash: string | null,
+  tipRef: string,
   currentBranch: string,
   defaultBranch: string | null,
   localBranches: Map<string, string[]>,
 ): { stack: StackBranch[]; stackHashes: Set<string> } {
   const stackHashes = new Set<string>();
-  if (!head || !defaultBranch) return { stack: [], stackHashes };
-  const mergeBase = tryGit(["merge-base", "HEAD", defaultBranch], cwd);
-  if (!mergeBase || mergeBase === head) return { stack: [], stackHashes };
+  if (!tipHash || !defaultBranch) return { stack: [], stackHashes };
+  const mergeBase = tryGit(["merge-base", tipRef, defaultBranch], cwd);
+  if (!mergeBase || mergeBase === tipHash) return { stack: [], stackHashes };
 
   // oldest-to-newest along first-parent lineage so stack slices order bottom-to-top
   const raw = tryGit(
-    ["rev-list", "--first-parent", "--reverse", "--max-count", String(STACK_SCAN_LIMIT), `${mergeBase}..HEAD`],
+    ["rev-list", "--first-parent", "--reverse", "--max-count", String(STACK_SCAN_LIMIT), `${mergeBase}..${tipRef}`],
     cwd,
   );
   if (!raw) return { stack: [], stackHashes };
@@ -90,9 +91,9 @@ function detectStack(
   for (const hash of lineage) {
     countSincePrev++;
     const names = localBranches.get(hash) ?? [];
-    if (names.length === 0 && hash !== head) continue;
+    if (names.length === 0 && hash !== tipHash) continue;
     // prefer currentBranch when multiple branch refs share HEAD
-    const chosen = names.includes(currentBranch) ? currentBranch : names[0] ?? currentBranch;
+    const chosen = names.includes(currentBranch) ? currentBranch : names[0] ?? (tipRef === "HEAD" ? currentBranch : "");
     if (!chosen || chosen === "HEAD") continue;
     stack.push({
       name: chosen,
@@ -100,7 +101,7 @@ function detectStack(
       shortHash: hash.slice(0, 7),
       parentRef: prevRef,
       commitCount: countSincePrev,
-      isHead: hash === head,
+      isHead: hash === tipHash,
     });
     prevRef = chosen;
     countSincePrev = 0;
@@ -109,19 +110,26 @@ function detectStack(
   return { stack, stackHashes };
 }
 
-export function readGitHistory(cwd: string, activeSpec: string | null, requestedLimit = DEFAULT_LIMIT): HistoryResponse {
+export function readGitHistory(
+  cwd: string,
+  activeSpec: string | null,
+  requestedLimit = DEFAULT_LIMIT,
+  headRef?: string | null,
+  baseRef?: string | null,
+): HistoryResponse {
   const limit = Math.max(1, Math.min(MAX_LIMIT, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : DEFAULT_LIMIT));
-  const head = tryGit(["rev-parse", "--verify", "--quiet", "HEAD"], cwd);
-  const currentBranch = tryGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd) ?? "HEAD";
-  const defaultBranch = resolveDefaultBranch(cwd);
+  const tipRef = headRef && headRef.trim() ? headRef.trim() : "HEAD";
+  const head = tryGit(["rev-parse", "--verify", "--quiet", tipRef], cwd);
+  const currentBranch = tipRef === "HEAD" ? (tryGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd) ?? "HEAD") : tipRef;
+  const defaultBranch = (baseRef && tryGit(["rev-parse", "--verify", "--quiet", baseRef], cwd) ? baseRef : null) ?? resolveDefaultBranch(cwd);
   const status = tryGit(["status", "--porcelain"], cwd) ?? "";
-  const hasWorkingChanges = status.length > 0;
+  const hasWorkingChanges = tipRef === "HEAD" && status.length > 0;
   const localBranches = readLocalBranches(cwd);
   const localNames = new Set<string>([...localBranches.values()].flat());
-  const { stack, stackHashes } = detectStack(cwd, head, currentBranch, defaultBranch, localBranches);
+  const { stack, stackHashes } = detectStack(cwd, head, tipRef, currentBranch, defaultBranch, localBranches);
 
   const fmt = ["%H", "%h", "%P", "%an", "%ar", "%D", "%s"].join(FIELD_SEP) + RECORD_SEP;
-  const raw = tryGit(["log", `-n`, String(limit), `--format=${fmt}`], cwd) ?? "";
+  const raw = tryGit(["log", `-n`, String(limit), `--format=${fmt}`, tipRef], cwd) ?? "";
   const commits: HistoryCommit[] = [];
 
   for (const record of raw.split(RECORD_SEP)) {

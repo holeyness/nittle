@@ -3,6 +3,7 @@
 
 import { join } from "node:path";
 import { helpFor, parseCliArgs } from "./utils/cli";
+import { resolvePrTarget } from "./utils/prTarget";
 import { launchReview } from "./core/reviewLaunch";
 import { currentVersion } from "./core/updateCheck";
 import { runMcpServer } from "./mcp";
@@ -91,11 +92,30 @@ export async function main(): Promise<void> {
   }
 
   const host = productEnv("SESSION_HOST") === "hook" ? "hook" : "cli";
+  let prTarget: ReturnType<typeof resolvePrTarget> | undefined;
+  if (opts.command === "pr") {
+    try {
+      prTarget = resolvePrTarget(opts.spec, cwd);
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err));
+    }
+  }
   let launch;
   try {
     launch = launchReview({
-      cwd, productRoot, spec: opts.spec, scope: opts.scope, reviewId: opts.reviewId,
-      policy: "handoff", port: opts.port, open: opts.open, lsp: opts.lsp, lspOverrides: opts.lspOverrides, host,
+      cwd,
+      productRoot,
+      spec: prTarget?.spec ?? opts.spec,
+      scope: opts.scope,
+      reviewId: opts.reviewId,
+      policy: "handoff",
+      port: opts.port,
+      open: opts.open,
+      lsp: opts.lsp,
+      lspOverrides: opts.lspOverrides,
+      pr: prTarget?.pr,
+      refLabelOverride: prTarget?.refLabel,
+      host,
     });
   } catch (err) {
     fail(err instanceof Error ? err.message : `port ${opts.port} is already in use`);

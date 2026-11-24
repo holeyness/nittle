@@ -12,7 +12,7 @@ import { apiError, json } from "./respond";
 export function handleGetHistory(ctx: ServerContext, url: URL): Response {
   const rawLimit = url.searchParams.get("limit");
   const limit = rawLimit ? Number(rawLimit) : undefined;
-  return json(readGitHistory(ctx.cwd, ctx.activeSpec ?? null, limit));
+  return json(readGitHistory(ctx.cwd, ctx.activeSpec ?? null, limit, ctx.historyTipRef ?? ctx.newRef, ctx.historyBaseRef));
 }
 
 export async function handlePostTarget(ctx: ServerContext, req: Request, url: URL): Promise<Response> {
@@ -28,13 +28,16 @@ export async function handlePostTarget(ctx: ServerContext, req: Request, url: UR
   const full = url.searchParams.get("full") === "1" || req.headers.get("x-nittle-full-file") === "1";
   try {
     const loaded = loadReviewTarget(ctx.cwd, spec, undefined, false);
+    // preserve PR metadata in the top bar while browsing commits inside a PR review
+    const existingPr = ctx.meta?.pr;
+    if (existingPr && loaded.meta) loaded.meta = { ...loaded.meta, pr: existingPr };
     const diff =
       full && loaded.mode !== "browse"
         ? excludeReviewFile(
             { ...parseDiff(collectDiff(loaded.diffArgs, ctx.cwd, loaded.includeUntracked, false, FULL_FILE_CONTEXT), loaded.diff.ref), meta: loaded.meta },
             false,
           )
-        : loaded.diff;
+        : { ...loaded.diff, meta: loaded.meta };
     ctx.diff = diff;
     ctx.diffArgs = loaded.diffArgs;
     ctx.newRef = loaded.newRef;

@@ -101,13 +101,21 @@
     {/if}
 
     {#if history.data}
-      {#if history.stack.length > 0 || history.data.hasWorkingChanges}
+      {#if history.stack.length > 0 || history.data.hasWorkingChanges || diff.meta?.pr}
         <div class="flex max-h-36 shrink-0 flex-col gap-1 overflow-auto border-t border-divider/60 px-2 py-1.5">
           <div class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-dim">
             <Layers size={11} />
-            <span>Stack slices</span>
+            <span>{diff.meta?.pr ? `PR #${diff.meta.pr.number}` : "Stack slices"}</span>
           </div>
           <div class="flex flex-wrap gap-1">
+            {#if diff.meta?.pr && history.initialSpec}
+              <button
+                type="button"
+                class="rounded border px-1.5 py-0.5 font-mono text-[11px] {history.activeChip === 'pr-all' || history.activeChip === null && history.selectedHashes.length === 0 ? 'border-accent bg-accent/15 text-accent' : 'border-border bg-surface-2 text-text hover:border-accent/60'}"
+                title="Show all changes in PR #{diff.meta.pr.number}"
+                onclick={() => history.selectInitial()}
+              >all PR changes</button>
+            {/if}
             {#if history.data.hasWorkingChanges}
               <button
                 type="button"

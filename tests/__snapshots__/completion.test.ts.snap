@@ -18,7 +18,7 @@ _nittle() {
   COMPREPLY=()
   if (( COMP_CWORD > 1 )); then
     case "\${COMP_WORDS[1]}" in
-      show|mcp|hook|sessions|cleanup|update|doctor|setup|lsp|completion) cmd="\${COMP_WORDS[1]}"; lead=1 ;;
+      show|pr|mcp|hook|sessions|cleanup|update|doctor|setup|lsp|completion) cmd="\${COMP_WORDS[1]}"; lead=1 ;;
     esac
   fi
   case "$cmd" in
@@ -36,6 +36,7 @@ _nittle() {
   case "$scope" in
     'review') flags="-p --port --no-open --wait --json --no-lsp --lsp --review-id -v --version --license -h --help" ;;
     'show') flags="-p --port --no-open --no-lsp --lsp -v --version --license -h --help" ;;
+    'pr') flags="-p --port --no-open --wait --json --no-lsp --lsp -v --version --license -h --help" ;;
     'mcp') flags="-h --help" ;;
     'mcp serve') flags="-v --version --license -h --help" ;;
     'mcp list') flags="-v --version --license -h --help" ;;
@@ -82,7 +83,7 @@ _nittle() {
     return
   fi
   if (( COMP_CWORD == 1 )); then
-    for word in show mcp hook sessions cleanup update doctor setup lsp completion; do _nittle_offer "$word"; done
+    for word in show pr mcp hook sessions cleanup update doctor setup lsp completion; do _nittle_offer "$word"; done
   fi
   if (( COMP_CWORD == 2 )); then
     for word in $subs; do _nittle_offer "$word"; done
@@ -104,10 +105,10 @@ exports[`completion scripts zsh output matches the snapshot 1`] = `
 _nittle() {
   local cmd=review sub="" scope lead=0 npos=0 skip=0 wantsrefs=0 word i
   local -a flags_ subs_ words_ refs cmds_
-  cmds_=('show:review one commit against its first parent' 'mcp:run or manage the local MCP server agents talk to' 'hook:experimental agent stop hook that opens a review of the working tree' 'sessions:list running review sessions (host, port, age, live/stale)' 'cleanup:stop stale sessions and finished reviews' 'update:download and install the latest release' 'doctor:check for stale agent plugins, old MCP configs, and an unfinished migration' 'setup:wire nittle into your coding agents (plugin or MCP config)' 'lsp:show which language server each language gets, and override it' 'completion:print a tab-completion script for your shell')
+  cmds_=('show:review one commit against its first parent' 'pr:review a GitHub pull request locally with full LSP (read-only fetch)' 'mcp:run or manage the local MCP server agents talk to' 'hook:experimental agent stop hook that opens a review of the working tree' 'sessions:list running review sessions (host, port, age, live/stale)' 'cleanup:stop stale sessions and finished reviews' 'update:download and install the latest release' 'doctor:check for stale agent plugins, old MCP configs, and an unfinished migration' 'setup:wire nittle into your coding agents (plugin or MCP config)' 'lsp:show which language server each language gets, and override it' 'completion:print a tab-completion script for your shell')
   if (( CURRENT > 2 )); then
     case "\${words[2]}" in
-      show|mcp|hook|sessions|cleanup|update|doctor|setup|lsp|completion) cmd="\${words[2]}"; lead=1 ;;
+      show|pr|mcp|hook|sessions|cleanup|update|doctor|setup|lsp|completion) cmd="\${words[2]}"; lead=1 ;;
     esac
   fi
   case "$cmd" in
@@ -125,6 +126,7 @@ _nittle() {
   case "$scope" in
     'review') flags_=('-p:serve on a fixed port (default: any free port)' '--port:serve on a fixed port (default: any free port)' '--no-open:don'\\''t open the browser automatically' '--wait:block until feedback is returned, then print the prompt on stdout' '--json:with --wait, print the review record as JSON instead of the prompt' '--no-lsp:start no language servers' '--lsp:use this server for one language this run; an empty command disables it (e.g. rust=rust-analyzer)' '--review-id:open an existing durable Review Record' '-v:print the installed version' '--version:print the installed version' '--license:print the bundled MIT license notice' '-h:show help' '--help:show help') ;;
     'show') flags_=('-p:serve on a fixed port (default: any free port)' '--port:serve on a fixed port (default: any free port)' '--no-open:don'\\''t open the browser automatically' '--no-lsp:start no language servers' '--lsp:use this server for one language this run; an empty command disables it (e.g. rust=rust-analyzer)' '-v:print the installed version' '--version:print the installed version' '--license:print the bundled MIT license notice' '-h:show help' '--help:show help') ;;
+    'pr') flags_=('-p:serve on a fixed port (default: any free port)' '--port:serve on a fixed port (default: any free port)' '--no-open:don'\\''t open the browser automatically' '--wait:block until feedback is returned, then print the prompt on stdout' '--json:with --wait, print the review record as JSON instead of the prompt' '--no-lsp:start no language servers' '--lsp:use this server for one language this run; an empty command disables it (e.g. rust=rust-analyzer)' '-v:print the installed version' '--version:print the installed version' '--license:print the bundled MIT license notice' '-h:show help' '--help:show help') ;;
     'mcp') flags_=('-h:show help' '--help:show help') ;;
     'mcp serve') flags_=('-v:print the installed version' '--version:print the installed version' '--license:print the bundled MIT license notice' '-h:show help' '--help:show help') ;;
     'mcp list') flags_=('-v:print the installed version' '--version:print the installed version' '--license:print the bundled MIT license notice' '-h:show help' '--help:show help') ;;
@@ -194,7 +196,7 @@ exports[`completion scripts fish output matches the snapshot 1`] = `
 function __nittle_cmd
     set -l words (commandline -opc)
     set -e words[1]
-    if set -q words[1]; and contains -- $words[1] show mcp hook sessions cleanup update doctor setup lsp completion
+    if set -q words[1]; and contains -- $words[1] show pr mcp hook sessions cleanup update doctor setup lsp completion
         echo $words[1]
     else
         echo review
@@ -263,6 +265,7 @@ end
 
 complete -c nittle -f
 complete -c nittle -n '__nittle_at_start' -a show -d 'review one commit against its first parent'
+complete -c nittle -n '__nittle_at_start' -a pr -d 'review a GitHub pull request locally with full LSP (read-only fetch)'
 complete -c nittle -n '__nittle_at_start' -a mcp -d 'run or manage the local MCP server agents talk to'
 complete -c nittle -n '__nittle_at_start' -a hook -d 'experimental agent stop hook that opens a review of the working tree'
 complete -c nittle -n '__nittle_at_start' -a sessions -d 'list running review sessions (host, port, age, live/stale)'
@@ -289,6 +292,15 @@ complete -c nittle -n '__nittle_scope_is "show"' -l lsp -x -d 'use this server f
 complete -c nittle -n '__nittle_scope_is "show"' -s v -l version -d 'print the installed version'
 complete -c nittle -n '__nittle_scope_is "show"' -l license -d 'print the bundled MIT license notice'
 complete -c nittle -n '__nittle_scope_is "show"' -s h -l help -d 'show help'
+complete -c nittle -n '__nittle_scope_is "pr"' -s p -l port -x -d 'serve on a fixed port (default: any free port)'
+complete -c nittle -n '__nittle_scope_is "pr"' -l no-open -d 'don\\'t open the browser automatically'
+complete -c nittle -n '__nittle_scope_is "pr"' -l wait -d 'block until feedback is returned, then print the prompt on stdout'
+complete -c nittle -n '__nittle_scope_is "pr"' -l json -d 'with --wait, print the review record as JSON instead of the prompt'
+complete -c nittle -n '__nittle_scope_is "pr"' -l no-lsp -d 'start no language servers'
+complete -c nittle -n '__nittle_scope_is "pr"' -l lsp -x -d 'use this server for one language this run; an empty command disables it (e.g. rust=rust-analyzer)'
+complete -c nittle -n '__nittle_scope_is "pr"' -s v -l version -d 'print the installed version'
+complete -c nittle -n '__nittle_scope_is "pr"' -l license -d 'print the bundled MIT license notice'
+complete -c nittle -n '__nittle_scope_is "pr"' -s h -l help -d 'show help'
 complete -c nittle -n '__nittle_scope_is "mcp"' -s h -l help -d 'show help'
 complete -c nittle -n '__nittle_scope_is "mcp serve"' -s v -l version -d 'print the installed version'
 complete -c nittle -n '__nittle_scope_is "mcp serve"' -l license -d 'print the bundled MIT license notice'
@@ -356,6 +368,7 @@ Register-ArgumentCompleter -Native -CommandName nittle, nittle.exe -ScriptBlock 
   param($wordToComplete, $commandAst, $cursorPosition)
   $commands = @{
     'show' = 'review one commit against its first parent'
+    'pr' = 'review a GitHub pull request locally with full LSP (read-only fetch)'
     'mcp' = 'run or manage the local MCP server agents talk to'
     'hook' = 'experimental agent stop hook that opens a review of the working tree'
     'sessions' = 'list running review sessions (host, port, age, live/stale)'
@@ -369,6 +382,7 @@ Register-ArgumentCompleter -Native -CommandName nittle, nittle.exe -ScriptBlock 
   $scopes = @{
     'review' = @('-p', '--port', '--no-open', '--wait', '--json', '--no-lsp', '--lsp', '--review-id', '-v', '--version', '--license', '-h', '--help')
     'show' = @('-p', '--port', '--no-open', '--no-lsp', '--lsp', '-v', '--version', '--license', '-h', '--help')
+    'pr' = @('-p', '--port', '--no-open', '--wait', '--json', '--no-lsp', '--lsp', '-v', '--version', '--license', '-h', '--help')
     'mcp' = @('-h', '--help')
     'mcp serve' = @('-v', '--version', '--license', '-h', '--help')
     'mcp list' = @('-v', '--version', '--license', '-h', '--help')

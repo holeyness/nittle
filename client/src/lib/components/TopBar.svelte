@@ -49,7 +49,18 @@
     <span class="hidden rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted sm:inline">{diff.meta.mode}</span>
   {/if}
 
-  <span class="min-w-0 flex-1 truncate font-mono text-sm text-muted">{diff.ref}</span>
+  {#if diff.meta?.pr}
+    <a
+      href={diff.meta.pr.url}
+      target="_blank"
+      rel="noreferrer"
+      class="inline-flex shrink-0 items-center gap-1 rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 font-mono text-xs font-medium text-accent hover:bg-accent/20"
+      title="{diff.meta.pr.title} (by @{diff.meta.pr.author} · {diff.meta.pr.state})"
+    >PR #{diff.meta.pr.number}</a>
+    <span class="min-w-0 flex-1 truncate text-sm text-text" title={diff.meta.pr.title}>{diff.meta.pr.title}</span>
+  {:else}
+    <span class="min-w-0 flex-1 truncate font-mono text-sm text-muted">{diff.ref}</span>
+  {/if}
 
   <span class="ml-auto hidden shrink-0 items-center gap-2 font-mono text-xs min-[701px]:flex">
     <span class="text-dim">{fileCount}</span>

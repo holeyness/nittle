@@ -30,6 +30,8 @@ export interface ServerContext {
   scope?: string; // browse path scope, reused on refresh
   served: boolean; // true once the launch-computed diff has been handed to the client
   activeSpec?: string; // current ref spec (updated when switching commits/branches in the UI)
+  historyTipRef?: string | null; // stable tip ref for the commit sidebar (e.g. a PR ref when launched via `nittle pr`)
+  historyBaseRef?: string | null; // stable base ref for stack/PR commit highlighting
   lastFullContext?: boolean; // whether ctx.diff was built with FULL_FILE_CONTEXT
   reviewId?: string; // durable Review Record selected by the MCP/CLI integration
   host: SessionHost; // which integration launched this server; read by /api/session/stop

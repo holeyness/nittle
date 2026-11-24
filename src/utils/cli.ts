@@ -52,6 +52,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
   const args = [...argv];
   const command =
     args[0] === "show" ? "show" :
+    args[0] === "pr" ? "pr" :
     args[0] === "mcp" ? "mcp" :
     args[0] === "hook" ? "hook" :
     args[0] === "sessions" ? "sessions" :
@@ -128,7 +129,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
       opts.port = port;
     } else if (opts.command === "lsp") {
       lspArgs.push(arg);
-    } else if (opts.command !== "review" && opts.command !== "show") {
+    } else if (opts.command !== "review" && opts.command !== "show" && opts.command !== "pr") {
       throw new Error(`unexpected argument: ${arg} (${opts.command} accepts options only)`);
     } else if (opts.spec === undefined) {
       opts.spec = arg;

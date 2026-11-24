@@ -61,6 +61,18 @@ export const COMMAND_HELP: Record<HelpTopic, CommandHelp> = {
     examples: [`${n} show`, `${n} show HEAD~2`, `${n} show a1b2c3d --no-open`],
     related: ["review"],
   },
+  pr: {
+    summary: "review a GitHub pull request locally with full LSP (read-only fetch)",
+    usage: [`${n} pr [number|url] [options]`],
+    details: [
+      "Fetches the PR head into a local ref (refs/nittle/pr-<N>) via git and gh without",
+      "changing your checked-out branch or working tree, then opens a three-dot merge-base",
+      "diff with full LSP navigation, commit history, and whole-repo search.",
+    ],
+    options: optionsFor("pr"),
+    examples: [`${n} pr 12345`, `${n} pr https://github.com/org/repo/pull/12345`, `${n} pr`],
+    related: ["review", "show"],
+  },
   mcp: {
     summary: "run or manage the local MCP server agents talk to",
     usage: [`${n} mcp serve`, `${n} mcp list`, `${n} mcp restart [--yes]`],

@@ -15,14 +15,15 @@ export interface FlagSpec {
   beforeSubcommand?: boolean | readonly CliCommand[]; // also valid right after the command, before any subcommand (`mcp --help`); a list limits that to those commands
 }
 
-const REVIEW_AND_SHOW: readonly CliCommand[] = ["review", "show"];
-const EVERY_COMMAND: readonly CliCommand[] = ["review", "show", "mcp", "hook", "sessions", "cleanup", "update", "doctor", "setup", "lsp", "completion"];
+const REVIEW_AND_SHOW: readonly CliCommand[] = ["review", "show", "pr"];
+const REVIEW_AND_PR: readonly CliCommand[] = ["review", "pr"];
+const EVERY_COMMAND: readonly CliCommand[] = ["review", "show", "pr", "mcp", "hook", "sessions", "cleanup", "update", "doctor", "setup", "lsp", "completion"];
 
 export const FLAG_SPECS: readonly FlagSpec[] = [
   { names: ["-p", "--port"], valueName: "n", description: "serve on a fixed port (default: any free port)", commands: REVIEW_AND_SHOW },
   { names: ["--no-open"], description: "don't open the browser automatically", commands: REVIEW_AND_SHOW },
-  { names: ["--wait"], description: "block until feedback is returned, then print the prompt on stdout", commands: ["review"] },
-  { names: ["--json"], description: "with --wait, print the review record as JSON instead of the prompt", commands: ["review"] },
+  { names: ["--wait"], description: "block until feedback is returned, then print the prompt on stdout", commands: REVIEW_AND_PR },
+  { names: ["--json"], description: "with --wait, print the review record as JSON instead of the prompt", commands: REVIEW_AND_PR },
   { names: ["--no-lsp"], description: "start no language servers", commands: REVIEW_AND_SHOW },
   { names: ["--lsp"], valueName: "lang=command", description: "use this server for one language this run; an empty command disables it (e.g. rust=rust-analyzer)", commands: REVIEW_AND_SHOW },
   { names: ["--review-id"], valueName: "id", description: "open an existing durable Review Record", commands: ["review"] },
