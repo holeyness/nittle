@@ -8,7 +8,6 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Columns2 from "@lucide/svelte/icons/columns-2";
   import FileCode from "@lucide/svelte/icons/file-code";
-  import Pilcrow from "@lucide/svelte/icons/pilcrow";
   import Rows3 from "@lucide/svelte/icons/rows-3";
   import { getAppState } from "$lib/state/context";
   import { useOrderedFiles } from "$lib/state/orderedFiles.svelte";
@@ -326,10 +325,9 @@
 
   <div class="ml-auto flex flex-wrap items-center gap-1.5">
     <label
-      class="inline-flex items-center gap-1 rounded border px-2 py-1 font-medium {ignoringWhitespace ? 'border-accent/50 bg-accent/10 text-accent' : 'border-border bg-surface-2 text-muted hover:text-text'}"
+      class="inline-flex items-center rounded border px-2 py-1 font-medium {ignoringWhitespace ? 'border-accent/50 bg-accent/10 text-accent' : 'border-border bg-surface-2 text-muted hover:text-text'}"
       title="Whitespace ignore policy (IntelliJ style)"
     >
-      <Pilcrow size={13} class="shrink-0" aria-hidden="true" />
       <select
         class="cursor-pointer bg-transparent text-xs font-medium text-inherit outline-none"
         aria-label="Ignore whitespace"
