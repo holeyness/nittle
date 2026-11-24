@@ -16,6 +16,13 @@ export interface ClickModifiers {
   shiftKey: boolean;
 }
 
+interface PendingSelection {
+  selectedHashes: string[];
+  anchorIndex: number | null;
+  chip: string | null;
+  label: string;
+}
+
 export function createHistoryStore(deps: HistoryDeps) {
   let data = $state.raw<HistoryResponse | null>(null);
   let initialSpec = $state<string | null>(null);
@@ -23,7 +30,7 @@ export function createHistoryStore(deps: HistoryDeps) {
   let error = $state<string | null>(null);
   let selectedHashes = $state<string[]>([]);
   let anchorIndex = $state<number | null>(null);
-  let activeChip = $state<string | null>(null); // "working" | "stack-all" | `branch:${name}` | null
+  let activeChip = $state<string | null>(null); // "working" | "stack-all" | "pr-all" | `branch:${name}` | null
   let selectionLabel = $state<string | null>(null);
   let inflight: AbortController | null = null;
 
@@ -31,11 +38,15 @@ export function createHistoryStore(deps: HistoryDeps) {
   const stack = $derived<StackBranch[]>(data?.stack ?? []);
   const selectedSet = $derived(new Set(selectedHashes));
 
-  async function applySpec(spec: string, label: string, chip: string | null): Promise<void> {
-    activeChip = chip;
-    selectionLabel = label;
+  // commit selection state only after switchTarget succeeds so failed/aborted switches never drift.
+  async function applySpec(spec: string, next: PendingSelection): Promise<void> {
     const ok = await deps.switchTarget(spec);
-    if (ok) deps.onSwitched?.();
+    if (!ok) return;
+    selectedHashes = next.selectedHashes;
+    anchorIndex = next.anchorIndex;
+    activeChip = next.chip;
+    selectionLabel = next.label;
+    deps.onSwitched?.();
   }
 
   return {
@@ -66,6 +77,9 @@ export function createHistoryStore(deps: HistoryDeps) {
     get selectionLabel(): string | null {
       return selectionLabel;
     },
+    get initialSpec(): string | null {
+      return initialSpec;
+    },
     async load(limit = 120): Promise<void> {
       inflight?.abort();
       inflight = new AbortController();
@@ -84,43 +98,59 @@ export function createHistoryStore(deps: HistoryDeps) {
         loading = false;
       }
     },
-    get initialSpec(): string | null {
-      return initialSpec;
-    },
     async selectInitial(): Promise<void> {
       if (!initialSpec) return;
-      selectedHashes = commits.filter((c) => c.onStack).map((c) => c.hash);
-      anchorIndex = selectedHashes.length > 0 ? 0 : null;
-      await applySpec(initialSpec, "all PR changes", "pr-all");
+      const hashes = commits.filter((c) => c.onStack).map((c) => c.hash);
+      await applySpec(initialSpec, {
+        selectedHashes: hashes,
+        anchorIndex: hashes.length > 0 ? 0 : null,
+        chip: "pr-all",
+        label: "all PR changes",
+      });
     },
     async selectWorking(): Promise<void> {
-      selectedHashes = [];
-      anchorIndex = null;
-      await applySpec("working", "working tree", "working");
+      await applySpec("working", {
+        selectedHashes: [],
+        anchorIndex: null,
+        chip: "working",
+        label: "working tree",
+      });
     },
     async selectStackBranch(branch: StackBranch): Promise<void> {
-      // highlight the commits belonging to this stack slice when present in the commit list
       const tipIdx = commits.findIndex((c) => c.hash === branch.hash);
+      let hashes: string[] = [];
+      let anchor: number | null = null;
       if (tipIdx >= 0) {
-        selectedHashes = commits.slice(tipIdx, tipIdx + branch.commitCount).map((c) => c.hash);
-        anchorIndex = tipIdx;
-      } else {
-        selectedHashes = [];
-        anchorIndex = null;
+        const parentIdx = commits.findIndex(
+          (c, i) => i > tipIdx && (!c.onStack || c.refs.some((r) => r.name === branch.parentRef)),
+        );
+        const endIdx = parentIdx > tipIdx ? parentIdx : Math.min(commits.length, tipIdx + branch.commitCount);
+        hashes = commits.slice(tipIdx, endIdx).map((c) => c.hash);
+        anchor = tipIdx;
       }
-      await applySpec(`${branch.parentRef}...${branch.name}`, `${branch.name} vs ${branch.parentRef}`, `branch:${branch.name}`);
+      await applySpec(`${branch.parentRef}...${branch.name}`, {
+        selectedHashes: hashes,
+        anchorIndex: anchor,
+        chip: `branch:${branch.name}`,
+        label: `${branch.name} vs ${branch.parentRef}`,
+      });
     },
     async selectWholeStack(): Promise<void> {
       if (!data?.defaultBranch) return;
-      selectedHashes = commits.filter((c) => c.onStack).map((c) => c.hash);
-      anchorIndex = selectedHashes.length > 0 ? 0 : null;
-      await applySpec(data.defaultBranch, `entire stack vs ${data.defaultBranch}`, "stack-all");
+      const hashes = commits.filter((c) => c.onStack).map((c) => c.hash);
+      await applySpec(data.defaultBranch, {
+        selectedHashes: hashes,
+        anchorIndex: hashes.length > 0 ? 0 : null,
+        chip: "stack-all",
+        label: `entire stack vs ${data.defaultBranch}`,
+      });
     },
     async clickCommit(index: number, mods: ClickModifiers): Promise<void> {
       const clicked = commits[index];
       if (!clicked) return;
 
       let nextIndices: number[];
+      let nextAnchor = anchorIndex;
       if (mods.shiftKey && anchorIndex !== null) {
         const start = Math.min(anchorIndex, index);
         const end = Math.max(anchorIndex, index);
@@ -136,20 +166,25 @@ export function createHistoryStore(deps: HistoryDeps) {
         } else {
           nextIndices = [...current, index];
         }
-        anchorIndex = index;
+        nextAnchor = index;
       } else {
         nextIndices = [index];
-        anchorIndex = index;
+        nextAnchor = index;
       }
 
       const resolved = commitRangeSpec(commits, nextIndices);
       if (!resolved) return;
 
-      selectedHashes = [...new Set(nextIndices)]
+      const hashes = [...new Set(nextIndices)]
         .sort((a, b) => a - b)
         .map((i) => commits[i]!.hash);
 
-      await applySpec(resolved.spec, resolved.label, null);
+      await applySpec(resolved.spec, {
+        selectedHashes: hashes,
+        anchorIndex: nextAnchor,
+        chip: null,
+        label: resolved.label,
+      });
     },
   };
 }

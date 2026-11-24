@@ -53,10 +53,7 @@ export function createSearchAllStore(deps: SearchAllDeps) {
     inflight = controller;
     status = "loading";
     try {
-      const response =
-        scope === "repo"
-          ? await fetchHits(query, regex, controller.signal, scope)
-          : await fetchHits(query, regex, controller.signal);
+      const response = await fetchHits(query, regex, controller.signal, scope);
       if (inflight !== controller) return;
       hits = response.results;
       truncated = response.truncated;

@@ -58,10 +58,10 @@ export function createLspStore(deps: LspDeps) {
   let pointed: CodeHit | null = null;
   let navigation: AbortController | undefined;
   let viewerLoad: AbortController | undefined;
-  let trail: JumpTarget[] = []; // viewers the reader hopped away from, newest last
   let backStack = $state.raw<NavEntry[]>([]);
   let forwardStack = $state.raw<NavEntry[]>([]);
   let browserSeq = 0;
+  let navGeneration = 0;
 
   function notify(text: string, tone: Tone = "info"): void {
     clearTimeout(noticeTimer);
@@ -104,10 +104,20 @@ export function createLspStore(deps: LspDeps) {
   function pushBrowserState(): void {
     try {
       if (typeof window !== "undefined" && typeof window.history?.pushState === "function") {
-        window.history.pushState({ nittleNav: ++browserSeq }, "");
+        window.history.pushState({ nittleNav: ++browserSeq, nittleGen: navGeneration }, "");
       }
     } catch {
       // restricted history contexts (e.g. opaque origins)
+    }
+  }
+
+  function replaceBrowserState(seq: number): void {
+    try {
+      if (typeof window !== "undefined" && typeof window.history?.replaceState === "function") {
+        window.history.replaceState({ nittleNav: seq, nittleGen: navGeneration }, "");
+      }
+    } catch {
+      // restricted history contexts
     }
   }
 
@@ -120,19 +130,12 @@ export function createLspStore(deps: LspDeps) {
     }
     viewerLoad?.abort();
     viewer = null;
-    trail = [];
     deps.goToHit({ path: entry.path, side: entry.side, line: entry.line, preview: "", ranges: [] });
   }
 
-  // `from` is the viewer this jump left: the hop goes on the trail, and the cursor was already
-  // remembered when the viewer first opened. without it the reader is coming from the diff.
+  // `from` is the viewer this jump left; without it the reader is coming from the diff.
   function openViewer(target: JumpTarget, from: JumpTarget | null): Promise<void> {
-    if (!from) {
-      deps.markJump();
-      trail = [];
-    } else if (!sameTarget(from, target)) {
-      trail = [...trail, from].slice(-JUMP_HISTORY_CAP);
-    }
+    if (!from) deps.markJump();
     return showViewer(target);
   }
 
@@ -161,7 +164,6 @@ export function createLspStore(deps: LspDeps) {
     cancelNavigation(); // a late definition answer must not reopen what was just closed
     viewerLoad?.abort();
     viewer = null;
-    trail = [];
     return wasOpen;
   }
 
@@ -171,12 +173,12 @@ export function createLspStore(deps: LspDeps) {
     const from = viewer?.target ?? null;
     const origin = captureCurrent(originHit);
     viewer = null;
-    const landed = jumpTo({ files: deps.files, toDiff: deps.goToHit, toViewer: (t) => void openViewer(t, from) }, target);
-    // the cursor history already holds where the reader started; viewer hops end where the diff begins
-    if (landed === "diff") trail = [];
+    jumpTo({ files: deps.files, toDiff: deps.goToHit, toViewer: (t) => void openViewer(t, from) }, target);
     if (origin) {
       const top = backStack[backStack.length - 1];
-      if (!top || !sameEntry(top, origin)) {
+      const sameAsDest =
+        origin.kind === "viewer" && sameTarget(origin.target, target);
+      if (!sameAsDest && (!top || !sameEntry(top, origin))) {
         backStack = [...backStack, origin].slice(-JUMP_HISTORY_CAP);
       }
       forwardStack = [];
@@ -184,22 +186,19 @@ export function createLspStore(deps: LspDeps) {
     }
   }
 
-  // Ctrl+o inside the viewer: one hop back along the trail. false when there is none, with the
-  // viewer closed, so the caller carries on with the cursor's jump history.
+  // Ctrl+o inside the viewer: step back along viewer hops; once only the diff remains beneath,
+  // close the viewer and return false so cursor history can take over.
   function viewerBack(): boolean {
-    cancelNavigation();
-    const previous = trail[trail.length - 1];
-    if (!previous) {
-      closeViewer();
-      return false;
-    }
-    trail = trail.slice(0, -1);
-    void showViewer(previous);
-    return true;
+    const top = backStack[backStack.length - 1];
+    if (viewer && top?.kind === "viewer") return navBack();
+    closeViewer();
+    return false;
   }
 
-  function navBack(): boolean {
-    if (backStack.length === 0) return viewerBack();
+  function navBack(fromPopState = false): boolean {
+    if (backStack.length === 0) {
+      return closeViewer();
+    }
     const prev = backStack[backStack.length - 1]!;
     const current = captureCurrent();
     backStack = backStack.slice(0, -1);
@@ -209,12 +208,12 @@ export function createLspStore(deps: LspDeps) {
         forwardStack = [...forwardStack, current].slice(-JUMP_HISTORY_CAP);
       }
     }
-    if (prev.kind === "viewer" && trail.length > 0) trail = trail.slice(0, -1);
+    if (!fromPopState && browserSeq > 0) replaceBrowserState(--browserSeq);
     restoreEntry(prev);
     return true;
   }
 
-  function navForward(): boolean {
+  function navForward(fromPopState = false): boolean {
     if (forwardStack.length === 0) return false;
     const next = forwardStack[forwardStack.length - 1]!;
     const current = captureCurrent();
@@ -225,25 +224,29 @@ export function createLspStore(deps: LspDeps) {
         backStack = [...backStack, current].slice(-JUMP_HISTORY_CAP);
       }
     }
+    if (!fromPopState) replaceBrowserState(++browserSeq);
     restoreEntry(next);
     return true;
   }
 
   function handlePopState(state: unknown): void {
-    const seq = typeof (state as { nittleNav?: unknown })?.nittleNav === "number" ? (state as { nittleNav: number }).nittleNav : 0;
+    const record = state as { nittleNav?: unknown; nittleGen?: unknown } | null;
+    if (record?.nittleGen !== undefined && record.nittleGen !== navGeneration) return;
+    const seq = typeof record?.nittleNav === "number" ? record.nittleNav : 0;
     if (seq < browserSeq) {
       browserSeq = seq;
-      navBack();
+      navBack(true);
     } else if (seq > browserSeq) {
       browserSeq = seq;
-      navForward();
+      navForward(true);
     }
   }
 
   function clearHistory(): void {
     backStack = [];
     forwardStack = [];
-    trail = [];
+    navGeneration++;
+    browserSeq = 0;
   }
 
   // files no language server answers for: resting the pointer on them stops asking

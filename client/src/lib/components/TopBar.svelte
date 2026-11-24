@@ -5,9 +5,7 @@
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Moon from "@lucide/svelte/icons/moon";
   import Sun from "@lucide/svelte/icons/sun";
-  import Columns2 from "@lucide/svelte/icons/columns-2";
   import WrapText from "@lucide/svelte/icons/wrap-text";
-  import Rows3 from "@lucide/svelte/icons/rows-3";
   import Sparkles from "@lucide/svelte/icons/sparkles";
   import CircleHelp from "@lucide/svelte/icons/circle-help";
   import NumberFlow from "@number-flow/svelte";
@@ -110,24 +108,6 @@
       onHelp={() => ui.toggleOverlay("help")}
     />
     <div class="hidden items-center gap-1 min-[701px]:flex">
-      <button
-        class="rounded p-1.5 hover:bg-surface-2 {prefs.fileView === 'single' ? 'bg-surface-2 text-accent' : 'text-muted hover:text-text'}"
-        aria-label="Single-file view"
-        aria-pressed={prefs.fileView === "single"}
-        title="Single-file view (o)"
-        onclick={() => prefs.setFileView(prefs.fileView === "single" ? "all" : "single")}
-      >
-        <Rows3 size={16} />
-      </button>
-      <button
-        class="rounded p-1.5 hover:bg-surface-2 {prefs.split ? 'bg-surface-2 text-accent' : 'text-muted hover:text-text'}"
-        aria-label="Side-by-side view"
-        aria-pressed={prefs.split}
-        title="Side-by-side view (s)"
-        onclick={() => prefs.toggleSplit()}
-      >
-        <Columns2 size={16} />
-      </button>
       <button
         class="rounded p-1.5 hover:bg-surface-2 {prefs.wrap ? 'bg-surface-2 text-accent' : 'text-muted hover:text-text'}"
         aria-label="Wrap lines"

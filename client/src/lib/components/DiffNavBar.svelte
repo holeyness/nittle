@@ -31,17 +31,23 @@
   let lastAutoScrolledKey = "";
 
   function scrollToBlock(path: string, block: ChangeBlock, moveCursor = true): void {
-    if (moveCursor) cursor.placeAt(path, block.side, block.line);
+    const placed = moveCursor && cursor.placeAt(path, block.side, block.line);
+    // when cursor.placeAt succeeds, DiffView's revealCursor already scrolls the row into view.
+    if (placed) return;
     void tick().then(() => {
       const section = document.querySelector<HTMLElement>(`[data-file-path="${CSS.escape(path)}"]`);
       if (!section) return;
-      const attr = block.side === "new" ? "data-newline" : "data-oldline";
+      const primaryAttr = block.side === "new" ? "data-newline" : "data-oldline";
       const row =
-        section.querySelector<HTMLElement>(`.diff-row[${attr}="${block.line}"]`) ??
-        section.querySelector<HTMLElement>(`.diff-row[data-newline="${block.newLine ?? ""}"]`) ??
-        section.querySelector<HTMLElement>(`.diff-row[data-oldline="${block.oldLine ?? ""}"]`);
+        section.querySelector<HTMLElement>(`.diff-row[${primaryAttr}="${block.line}"]`) ??
+        (block.newLine != null ? section.querySelector<HTMLElement>(`.diff-row[data-newline="${block.newLine}"]`) : null) ??
+        (block.oldLine != null ? section.querySelector<HTMLElement>(`.diff-row[data-oldline="${block.oldLine}"]`) : null);
       row?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
+  }
+
+  function autoScrollKey(path: string, blockCount: number): string {
+    return `${diff.ref}\0${path}\0${prefs.fullFile ? "full" : "hunk"}\0${prefs.fileView}\0${blockCount}`;
   }
 
   // when opening a file in full-file + single-file mode, land directly on its first change block.
@@ -51,7 +57,7 @@
     const full = prefs.fullFile;
     const single = prefs.fileView === "single";
     if (!file) return;
-    const key = `${diff.ref}\0${file.path}\0${full ? "full" : "hunk"}\0${list.length}`;
+    const key = autoScrollKey(file.path, list.length);
     if (key === lastAutoScrolledKey) return;
     lastAutoScrolledKey = key;
     activeBlockIdx = 0;
@@ -70,7 +76,7 @@
     const targetBlocks = changeBlocksOf(target);
     const idx = targetBlocks.length === 0 ? 0 : jumpTo === "last" ? targetBlocks.length - 1 : 0;
     activeBlockIdx = idx;
-    lastAutoScrolledKey = `${diff.ref}\0${target.path}\0${prefs.fullFile ? "full" : "hunk"}\0${targetBlocks.length}`;
+    lastAutoScrolledKey = autoScrollKey(target.path, targetBlocks.length);
     const block = targetBlocks[idx];
     if (block) {
       void tick().then(() => requestAnimationFrame(() => scrollToBlock(target.path, block)));
@@ -85,30 +91,58 @@
     if (activeIndex >= 0 && activeIndex < files.length - 1) selectFileByIndex(activeIndex + 1, "first");
   }
 
+  function blockLine(block: ChangeBlock, side: "old" | "new"): number {
+    return (side === "new" ? block.newLine : block.oldLine) ?? block.line;
+  }
+
   function nextChange(): void {
     if (!activeFile) return;
-    if (blocks.length > 0 && activeBlockIdx < blocks.length - 1) {
-      activeBlockIdx += 1;
-      scrollToBlock(activeFile.path, blocks[activeBlockIdx]!);
-      return;
+    const pos = cursor.pos?.path === activeFile.path && cursor.pos.line > 0 ? cursor.pos : null;
+    if (blocks.length > 0) {
+      const nextIdx = pos
+        ? blocks.findIndex((b) => blockLine(b, pos.side) > pos.line)
+        : activeBlockIdx < blocks.length - 1
+          ? activeBlockIdx + 1
+          : -1;
+      if (nextIdx >= 0) {
+        activeBlockIdx = nextIdx;
+        scrollToBlock(activeFile.path, blocks[nextIdx]!);
+        return;
+      }
     }
     if (activeIndex < files.length - 1) {
       selectFileByIndex(activeIndex + 1, "first");
     } else if (blocks.length > 0) {
+      activeBlockIdx = blocks.length - 1;
       scrollToBlock(activeFile.path, blocks[blocks.length - 1]!);
     }
   }
 
   function prevChange(): void {
     if (!activeFile) return;
-    if (blocks.length > 0 && activeBlockIdx > 0) {
-      activeBlockIdx -= 1;
-      scrollToBlock(activeFile.path, blocks[activeBlockIdx]!);
-      return;
+    const pos = cursor.pos?.path === activeFile.path && cursor.pos.line > 0 ? cursor.pos : null;
+    if (blocks.length > 0) {
+      let prevIdx = -1;
+      if (pos) {
+        for (let i = blocks.length - 1; i >= 0; i--) {
+          if (blockLine(blocks[i]!, pos.side) < pos.line) {
+            prevIdx = i;
+            break;
+          }
+        }
+      } else if (activeBlockIdx > 0) {
+        prevIdx = activeBlockIdx - 1;
+      }
+      if (prevIdx >= 0) {
+        activeBlockIdx = prevIdx;
+        scrollToBlock(activeFile.path, blocks[prevIdx]!);
+        return;
+      }
     }
     if (activeIndex > 0) {
       selectFileByIndex(activeIndex - 1, "last");
     } else if (blocks.length > 0) {
+      activeBlockIdx = 0;
       scrollToBlock(activeFile.path, blocks[0]!);
     }
   }
@@ -191,7 +225,9 @@
       disabled={!lsp.canGoBack}
       aria-label="Jump back"
       title="Jump back (⌥⌘← / Ctrl+o / browser Back)"
-      onclick={() => lsp.navBack()}
+      onclick={() => {
+        if (!lsp.navBack()) cursor.back(activeFile?.path);
+      }}
     >
       <ChevronLeft size={14} />
     </button>
@@ -201,7 +237,9 @@
       disabled={!lsp.canGoForward}
       aria-label="Jump forward"
       title="Jump forward (⌥⌘→ / Ctrl+i / browser Forward)"
-      onclick={() => lsp.navForward()}
+      onclick={() => {
+        if (!lsp.navForward()) cursor.forward(activeFile?.path);
+      }}
     >
       <ChevronRight size={14} />
     </button>

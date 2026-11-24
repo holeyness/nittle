@@ -93,12 +93,11 @@ export function createAppState(reviewId = reviewIdFromUrl()): AppState {
   });
   const searchAll = createSearchAllStore({
     jump: (hit) => {
-      const inDiff = diff.files.some((f) => f.path === hit.path || f.oldPath === hit.path);
-      if (inDiff) {
+      if (searchAll.scope === "repo") {
+        lsp.jump({ path: hit.path, absolutePath: hit.path, inRepo: true, side: hit.side, line: hit.line, character: hit.ranges[0]?.[0] ?? 0 });
+      } else {
         lsp.closeViewer();
         cursor.goToHit(hit);
-      } else {
-        lsp.jump({ path: hit.path, absolutePath: hit.path, inRepo: true, side: hit.side, line: hit.line, character: hit.ranges[0]?.[0] ?? 0 });
       }
     },
   });
