@@ -41,6 +41,7 @@ export async function handlePostTarget(ctx: ServerContext, req: Request, url: UR
     ctx.scope = loaded.scope;
     ctx.activeSpec = loaded.pinnedSpec ?? spec;
     ctx.served = true;
+    ctx.diffFull = contextLines === FULL_FILE_CONTEXT;
     ctx.diffGeneration = (ctx.diffGeneration ?? 0) + 1;
     return json(ctx.diff);
   } catch (error) {

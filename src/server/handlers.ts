@@ -29,6 +29,7 @@ export interface ServerContext {
   mode?: "diff" | "browse"; // browse re-scans the codebase on refresh instead of re-diffing
   scope?: string; // browse path scope, reused on refresh
   served: boolean; // true once the launch-computed diff has been handed to the client
+  diffFull?: boolean; // whether ctx.diff was computed with FULL_FILE_CONTEXT
   activeSpec?: string; // current ref spec (updated when switching commits/branches in the UI)
   historyTipRef?: string | null; // stable tip ref for the commit sidebar (e.g. a PR ref when launched via `nittle pr`)
   historyBaseRef?: string | null; // stable base ref for stack/PR commit highlighting
@@ -68,7 +69,7 @@ export function isFullContextRequest(url?: URL, req?: Request): boolean {
 // computed at launch when the requested context mode matches — no point running git twice.
 export function handleGetDiff(ctx: ServerContext, url?: URL, req?: Request): Response {
   const full = isFullContextRequest(url, req);
-  if (!ctx.served && !full) {
+  if (!ctx.served && (ctx.mode === "browse" || full === Boolean(ctx.diffFull))) {
     ctx.served = true;
     return json(ctx.diff);
   }
@@ -79,6 +80,7 @@ export function handleGetDiff(ctx: ServerContext, url?: URL, req?: Request): Res
       ctx.mode === "browse"
         ? excludeReviewFile(scanProject(ctx.cwd, ctx.scope), false)
         : buildDiff(ctx.diffArgs, ctx.cwd, ctx.includeUntracked, ctx.diff.ref, ctx.meta, false, contextLines);
+    ctx.diffFull = full;
     ctx.diffGeneration = (ctx.diffGeneration ?? 0) + 1;
   } catch {
     // keep the previous diff

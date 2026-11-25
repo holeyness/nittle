@@ -23,7 +23,6 @@
   import { createInterdiff } from "$lib/diff/interdiff.svelte";
   import { nearViewport } from "$lib/actions";
   import { FILE_LEVEL } from "$lib/state/cursorSteps";
-  import { revealRows } from "$lib/motion";
   import UnifiedDiff from "./UnifiedDiff.svelte";
   import SplitDiff from "./SplitDiff.svelte";
   import MarkdownPreview from "./MarkdownPreview.svelte";
@@ -244,7 +243,7 @@
       {:else if !giant && !effectiveMounted}
         <div style="height:{estimatedHeight(shown)}px" use:nearViewport={() => (mounted = true)}></div>
       {:else}
-        <div class="diff-scroll {useSplit ? 'split-scroll' : 'overflow-x-auto'} {prefs.wrap ? 'wrap' : ''}" use:revealRows>
+        <div class="diff-scroll {useSplit ? 'split-scroll' : 'overflow-x-auto'} {prefs.wrap ? 'wrap' : ''}">
           {#if useSplit}<SplitDiff file={shown} {annotations} />{:else}<UnifiedDiff file={shown} {annotations} />{/if}
         </div>
       {/if}

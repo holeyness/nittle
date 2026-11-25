@@ -148,4 +148,15 @@ describe("review launch", () => {
       expect(res.status).toBe(404);
     } finally { launch.server.stop(true); }
   });
+
+  it("reuses the launch full-file diff on the first full-file GET /api/diff", async () => {
+    const launch = launchReview({ cwd: repo, productRoot: root, open: false, policy: "handoff", host: "cli" });
+    try {
+      const base = launch.url.split("/?")[0];
+      const res = await fetch(`${base}/api/diff`, { headers: { "X-Nittle-Full-File": "1" } });
+      expect(res.status).toBe(200);
+      expect(launch.ctx.served).toBe(true);
+      expect(launch.ctx.diffGeneration ?? 0).toBe(0);
+    } finally { launch.server.stop(true); }
+  });
 });

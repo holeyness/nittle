@@ -12,6 +12,14 @@ const PURE_DELETION = /\+(\d+),0\b/;
 // this it isn't worth the stall or the fetch.
 const MAX_CONTEXT_LINES = 4000;
 
+function isSharedContext(line: DiffLine): boolean {
+  return line.type === "context" && line.oldLine != null && line.newLine != null && line.oldContent === undefined;
+}
+
+function needsOldOutput(line: DiffLine): boolean {
+  return line.type === "deletion" || line.newLine == null || line.oldContent !== undefined;
+}
+
 // how many new-side lines come before the hunk.
 function linesBefore(hunk: DiffHunk): number {
   const first = hunk.lines.find((l) => l.newLine != null)?.newLine;
@@ -51,18 +59,55 @@ export async function highlightFile(file: DiffFile, newText: string | null): Pro
       state = stateAfter(hl, source.slice(consumed, start), lang, state);
       consumed = start;
     }
-    const oldSide = hunk.lines.filter((l) => l.type === "deletion" || l.oldLine != null);
-    const newSide = hunk.lines.filter((l) => l.type === "addition" || l.newLine != null);
-    const old = highlightLines(hl, oldSide.map((l) => l.oldContent ?? l.content), lang, state);
-    const next = highlightLines(hl, newSide.map((l) => l.content), lang, state);
-    oldSide.forEach((l, i) => {
-      const rendered = old.lines[i] ?? "";
-      if (l.type === "deletion" || l.newLine == null) html.set(l, rendered);
-      if (l.oldContent !== undefined) oldHtml.set(l, rendered);
-    });
-    newSide.forEach((l, i) => html.set(l, next.lines[i] ?? ""));
+
+    // tokenize leading shared context once so both sides inherit its exact grammar state.
+    let prefixEnd = 0;
+    while (prefixEnd < hunk.lines.length && isSharedContext(hunk.lines[prefixEnd]!)) {
+      prefixEnd++;
+    }
+    let midState = state;
+    if (prefixEnd > 0) {
+      const prefix = hunk.lines.slice(0, prefixEnd);
+      const pre = highlightLines(hl, prefix.map((l) => l.content), lang, state);
+      prefix.forEach((l, i) => html.set(l, pre.lines[i] ?? ""));
+      midState = pre.state;
+    }
+
+    const rest = hunk.lines.slice(prefixEnd);
+    const oldRest = rest.filter((l) => l.type === "deletion" || l.oldLine != null);
+    const newRest = rest.filter((l) => l.type === "addition" || l.newLine != null);
+    const hasNewSide = prefixEnd > 0 || newRest.length > 0;
+
+    // stop tokenizing the old side after the last line whose old-side output is actually used.
+    let lastOldIndex = -1;
+    for (let i = oldRest.length - 1; i >= 0; i--) {
+      if (needsOldOutput(oldRest[i]!)) {
+        lastOldIndex = i;
+        break;
+      }
+    }
+
+    let oldState = midState;
+    if (lastOldIndex >= 0) {
+      const oldSlice = oldRest.slice(0, lastOldIndex + 1);
+      const old = highlightLines(hl, oldSlice.map((l) => l.oldContent ?? l.content), lang, midState);
+      oldSlice.forEach((l, i) => {
+        const rendered = old.lines[i] ?? "";
+        if (l.type === "deletion" || l.newLine == null) html.set(l, rendered);
+        if (l.oldContent !== undefined) oldHtml.set(l, rendered);
+      });
+      oldState = old.state;
+    }
+
+    let nextState = midState;
+    if (newRest.length > 0) {
+      const next = highlightLines(hl, newRest.map((l) => l.content), lang, midState);
+      newRest.forEach((l, i) => html.set(l, next.lines[i] ?? ""));
+      nextState = next.state;
+    }
+
     // without the file text, carry the state across hunks as a best effort.
-    if (!source) state = newSide.length ? next.state : old.state;
+    if (!source) state = hasNewSide ? nextState : oldState;
   }
   return { html, oldHtml };
 }

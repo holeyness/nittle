@@ -31,27 +31,3 @@ export const FLIP = {
     return reduced() ? 0 : 220;
   },
 };
-
-// staggered rise-in for the first rows of a freshly mounted diff; rows past the cap
-// are usually off-screen, so they appear instantly. no-op under reduced motion.
-const STAGGER_ROWS = 40;
-const STAGGER_STEP_MS = 12;
-
-export function revealRows(node: HTMLElement) {
-  if (reduced()) return;
-  const panes = Array.from(node.querySelectorAll<HTMLElement>(".split-pane"));
-  const rowGroups = panes.length === 2 ? panes : [node];
-  // old/new panes render their rows separately; paired rows must share the same delay.
-  for (const group of rowGroups) {
-    const rows = Array.from(group.querySelectorAll<HTMLElement>(".diff-row")).slice(0, STAGGER_ROWS);
-    for (const [index, row] of rows.entries()) {
-      row.animate?.(
-        [
-          { opacity: 0, transform: "translateY(4px)" },
-          { opacity: 1, transform: "none" },
-        ],
-        { duration: 220, delay: index * STAGGER_STEP_MS, easing: "cubic-bezier(0.33, 1, 0.68, 1)", fill: "backwards" },
-      );
-    }
-  }
-}

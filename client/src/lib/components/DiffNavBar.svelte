@@ -31,20 +31,34 @@
   let activeBlockIdx = $state(0);
   let lastAutoScrolledKey = "";
 
-  function scrollToBlock(path: string, block: ChangeBlock, moveCursor = true): void {
+  function scrollRowIntoView(path: string, block: ChangeBlock, behavior: ScrollBehavior): boolean {
+    const section = document.querySelector<HTMLElement>(`[data-file-path="${CSS.escape(path)}"]`);
+    if (!section) return false;
+    const primaryAttr = block.side === "new" ? "data-newline" : "data-oldline";
+    const row =
+      section.querySelector<HTMLElement>(`.diff-row[${primaryAttr}="${block.line}"]`) ??
+      (block.newLine != null ? section.querySelector<HTMLElement>(`.diff-row[data-newline="${block.newLine}"]`) : null) ??
+      (block.oldLine != null ? section.querySelector<HTMLElement>(`.diff-row[data-oldline="${block.oldLine}"]`) : null);
+    if (!row) return false;
+    const pane = document.querySelector<HTMLElement>("[data-diff-pane]");
+    if (pane) {
+      const paneRect = pane.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const top = Math.max(0, pane.scrollTop + rowRect.top - paneRect.top - (paneRect.height - rowRect.height) / 2);
+      if (typeof pane.scrollTo === "function") pane.scrollTo({ top, behavior });
+      else pane.scrollTop = top;
+    } else {
+      row.scrollIntoView?.({ behavior, block: "center" });
+    }
+    return true;
+  }
+
+  function scrollToBlock(path: string, block: ChangeBlock, moveCursor = true, behavior: ScrollBehavior = "smooth"): void {
     const placed = moveCursor && cursor.placeAt(path, block.side, block.line);
     // when cursor.placeAt succeeds, DiffView's revealCursor already scrolls the row into view.
     if (placed) return;
-    void tick().then(() => {
-      const section = document.querySelector<HTMLElement>(`[data-file-path="${CSS.escape(path)}"]`);
-      if (!section) return;
-      const primaryAttr = block.side === "new" ? "data-newline" : "data-oldline";
-      const row =
-        section.querySelector<HTMLElement>(`.diff-row[${primaryAttr}="${block.line}"]`) ??
-        (block.newLine != null ? section.querySelector<HTMLElement>(`.diff-row[data-newline="${block.newLine}"]`) : null) ??
-        (block.oldLine != null ? section.querySelector<HTMLElement>(`.diff-row[data-oldline="${block.oldLine}"]`) : null);
-      row?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+    if (scrollRowIntoView(path, block, behavior)) return;
+    void tick().then(() => scrollRowIntoView(path, block, behavior));
   }
 
   function autoScrollKey(path: string, blockCount: number): string {
@@ -64,8 +78,8 @@
     activeBlockIdx = 0;
     if (full && single && list.length > 0) {
       const first = list[0]!;
-      // small delay lets SplitDiff finish mounting its rows before scrolling to the first change
-      void tick().then(() => requestAnimationFrame(() => scrollToBlock(file.path, first, false)));
+      // wait one animation frame after mount so alignSplitRows settles wrapped/comment row heights
+      void tick().then(() => requestAnimationFrame(() => scrollToBlock(file.path, first, false, "instant")));
     }
   });
 
@@ -80,7 +94,7 @@
     lastAutoScrolledKey = autoScrollKey(target.path, targetBlocks.length);
     const block = targetBlocks[idx];
     if (block) {
-      void tick().then(() => requestAnimationFrame(() => scrollToBlock(target.path, block)));
+      void tick().then(() => requestAnimationFrame(() => scrollToBlock(target.path, block, true, "instant")));
     }
   }
 

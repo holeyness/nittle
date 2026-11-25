@@ -1,29 +1,30 @@
 import type { Action } from "svelte/action";
 
-function setPaneScrollWidth(pane: HTMLElement): void {
-  const codeLines = pane.querySelectorAll<HTMLElement>(".code-inner");
-  let widestCode = 0;
-  for (const line of codeLines) {
-    widestCode = Math.max(widestCode, line.scrollWidth);
+function setPaneScrollWidths(panes: HTMLElement[]): void {
+  // clear --split-code-width before reading scrollWidth so panes can shrink after edits/re-renders;
+  // batch writes, then reads, then writes to avoid layout thrashing.
+  for (const pane of panes) {
+    pane.style.removeProperty("--split-code-width");
   }
+  const widths = panes.map((pane) => pane.scrollWidth);
+  panes.forEach((pane, index) => {
+    // short rows must span the full scroll width so their sticky gutters cannot scroll away.
+    pane.style.setProperty("--split-code-width", `${widths[index]}px`);
+  });
+}
 
-  const codeCell = pane.querySelector<HTMLElement>(".code");
-  const cellStyle = codeCell ? getComputedStyle(codeCell) : null;
-  const codePadding = cellStyle
-    ? parseFloat(cellStyle.paddingLeft) + parseFloat(cellStyle.paddingRight)
-    : 0;
-  const gutterWidth = pane.querySelector<HTMLElement>(".split-gutter")?.offsetWidth ?? 0;
-  const scrollWidth = widestCode + gutterWidth + codePadding;
-
-  // short rows must span the full scroll width so their sticky gutters cannot scroll away.
-  pane.style.setProperty("--split-code-width", `${scrollWidth}px`);
+function clearRowHeights(panes: HTMLElement[]): void {
+  for (const pane of panes) {
+    for (const child of Array.from(pane.children) as HTMLElement[]) {
+      if (child.style.height) child.style.height = "";
+    }
+  }
 }
 
 function matchRowHeights(oldRows: HTMLElement[], newRows: HTMLElement[]): void {
   // clear assigned heights before measuring; reads and writes happen in separate batches.
-  for (const row of [...oldRows, ...newRows]) {
-    row.style.height = "";
-  }
+  for (const row of oldRows) row.style.height = "";
+  for (const row of newRows) row.style.height = "";
 
   const heights = oldRows.map((oldRow, index) => {
     const oldHeight = oldRow.getBoundingClientRect().height;
@@ -37,7 +38,9 @@ function matchRowHeights(oldRows: HTMLElement[], newRows: HTMLElement[]): void {
   }
 }
 
-export const alignSplitRows: Action<HTMLElement> = (node) => {
+export const alignSplitRows: Action<HTMLElement, boolean> = (node, initialWrap = false) => {
+  let wrap = initialWrap;
+  let hadWrappedHeights = false;
   let pendingFrame = 0;
   let disposed = false;
   const observedContent = new Set<Element>();
@@ -48,7 +51,8 @@ export const alignSplitRows: Action<HTMLElement> = (node) => {
     pendingFrame = requestAnimationFrame(align);
   }
 
-  // observe natural content sizes, not assigned row heights, to avoid resize feedback loops.
+  // observe natural content sizes (.split-pane widths and .comment-box heights), not assigned
+  // row or slot heights, to avoid resize feedback loops.
   const resizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       const isPane = entry.target.classList.contains("split-pane");
@@ -61,9 +65,7 @@ export const alignSplitRows: Action<HTMLElement> = (node) => {
   });
 
   function updateObservedContent(): void {
-    const currentContent = new Set(
-      node.querySelectorAll(".split-pane, .code-inner, .comment-box"),
-    );
+    const currentContent = new Set(node.querySelectorAll(".split-pane, .comment-box"));
     for (const element of observedContent) {
       if (currentContent.has(element)) continue;
       resizeObserver.unobserve(element);
@@ -79,17 +81,35 @@ export const alignSplitRows: Action<HTMLElement> = (node) => {
   function align(): void {
     pendingFrame = 0;
     const panes = Array.from(node.querySelectorAll<HTMLElement>(".split-pane"));
-    const rows = panes.map((pane) => Array.from(pane.children) as HTMLElement[]);
-    const [oldRows, newRows] = rows;
-    if (rows.length !== 2 || !oldRows || !newRows || oldRows.length !== newRows.length) {
+    if (panes.length !== 2) return;
+    const [oldPane, newPane] = panes as [HTMLElement, HTMLElement];
+
+    updateObservedContent();
+
+    if (wrap) {
+      const oldRows = Array.from(oldPane.children) as HTMLElement[];
+      const newRows = Array.from(newPane.children) as HTMLElement[];
+      if (oldRows.length === newRows.length) {
+        matchRowHeights(oldRows, newRows);
+        hadWrappedHeights = true;
+      }
       return;
     }
 
-    updateObservedContent();
-    for (const pane of panes) {
-      setPaneScrollWidth(pane);
+    if (hadWrappedHeights) {
+      clearRowHeights(panes);
+      hadWrappedHeights = false;
     }
-    matchRowHeights(oldRows, newRows);
+    setPaneScrollWidths(panes);
+
+    // unwrapped code rows share a fixed CSS height; only paired comment slots can vary in height.
+    const oldComments = Array.from(oldPane.querySelectorAll<HTMLElement>(".split-comment-slot"));
+    if (oldComments.length > 0) {
+      const newComments = Array.from(newPane.querySelectorAll<HTMLElement>(".split-comment-slot"));
+      if (oldComments.length === newComments.length) {
+        matchRowHeights(oldComments, newComments);
+      }
+    }
   }
 
   const mutationObserver = new MutationObserver(scheduleAlignment);
@@ -98,6 +118,11 @@ export const alignSplitRows: Action<HTMLElement> = (node) => {
   scheduleAlignment();
 
   return {
+    update(nextWrap: boolean): void {
+      if (nextWrap === wrap) return;
+      wrap = nextWrap;
+      scheduleAlignment();
+    },
     destroy(): void {
       disposed = true;
       cancelAnimationFrame(pendingFrame);

@@ -1,14 +1,13 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
   import NumberFlow from "@number-flow/svelte";
-  import { fileAnchorId, type TreeFile } from "$lib/diff/tree";
+  import type { TreeFile } from "$lib/diff/tree";
   import { getAppState } from "$lib/state/context";
   import { changeBadge } from "$lib/format";
   import { worstFlagBand, BAND_DOT, BAND_LABEL } from "$lib/scorecard/bands";
-  import { morphInto } from "$lib/viewTransition";
 
   let { file, depth = 0, review = false }: { file: TreeFile; depth?: number; review?: boolean } = $props();
-  const { ui, comments, prefs, analysis } = getAppState();
+  const { ui, comments, analysis } = getAppState();
 
   const leaf = $derived(file.path.slice(file.path.lastIndexOf("/") + 1));
   const dir = $derived(file.path.slice(0, Math.max(0, file.path.length - leaf.length - 1)));
@@ -19,14 +18,6 @@
   const active = $derived(ui.activeFile === file.path);
   const viewed = $derived(comments.viewedSet.has(file.path));
   const count = $derived(comments.countFor(file.path));
-
-  // single-file mode swaps the diff, so the row morphs into its file header; all-files mode just scrolls.
-  function select(e: MouseEvent & { currentTarget: HTMLElement }): void {
-    if (prefs.fileView !== "single" || active) return ui.selectFile(file.path);
-    morphInto(e.currentTarget, () => ui.selectFile(file.path), () =>
-      document.getElementById(fileAnchorId(file.path))?.querySelector<HTMLElement>("[data-file-header]") ?? null,
-    );
-  }
 </script>
 
 <div class="flex items-center gap-1 pr-1.5" style="padding-left: {depth * 12 + 6}px">
@@ -34,7 +25,7 @@
     type="button"
     class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-surface-2 {active ? 'bg-surface-2 text-text' : 'text-muted'}"
     aria-current={active ? "true" : undefined}
-    onclick={select}
+    onclick={() => ui.selectFile(file.path)}
   >
     <span class="grid size-4 shrink-0 place-items-center rounded font-mono text-[10px] font-semibold {badge.cls}" title={badge.label}>{badge.letter}</span>
     <span class="font-mono {review ? 'max-w-[70%] shrink-0' : ''} truncate {info?.noise ? 'opacity-60' : ''}" title={review ? file.path : undefined}>{review ? leaf : file.name}</span>

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import MessageSquarePlus from "@lucide/svelte/icons/message-square-plus";
   import type { CommentTag, DiffFile, DiffLine } from "$types";
   import { getAppState } from "$lib/state/context";
   import { addDraftKey } from "$lib/state/draftKeys";
@@ -124,9 +123,7 @@
                 title="Comment — drag or shift-click to select a range"
                 onmousedown={(event) => startSelect(event, ui, file.path, side, number)}
                 onclick={(event) => keyboardComment(event, number)}
-              >
-                <MessageSquarePlus size={13} />
-              </button>
+              ></button>
             {/if}
           </span>
           {#if interactive}

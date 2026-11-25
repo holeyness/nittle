@@ -25,7 +25,7 @@
   });
 </script>
 
-<div class="split-diff" style="--split-ratio:{effectiveRatio}" use:alignSplitRows>
+<div class="split-diff" style="--split-ratio:{effectiveRatio}" use:alignSplitRows={prefs.wrap}>
   <SplitPane {file} {rows} side="old" id="{id}-old" {highlighted} {annotations} />
   <SplitDivider
     value={requestedRatio}

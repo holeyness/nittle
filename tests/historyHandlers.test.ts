@@ -6,6 +6,7 @@ import { readGitHistory } from "../src/utils/gitHistory";
 import { handleGetDiff } from "../src/server/handlers";
 import { handleGetHistory, handlePostTarget } from "../src/server/historyHandlers";
 import { loadReviewTarget } from "../src/core/reviewTarget";
+import { FULL_FILE_CONTEXT } from "../src/utils/git";
 import type { ServerContext } from "../src/server/handlers";
 import type { DiffResult, HistoryResponse } from "../src/types";
 
@@ -156,5 +157,43 @@ describe("history & full-file diff handlers", () => {
     const body = (await res.json()) as { results: { path: string; line: number }[]; truncated: boolean };
     expect(body.results).toHaveLength(1);
     expect(body.results[0]).toMatchObject({ path: "unchanged.py", line: 1 });
+  });
+
+  it("reuses the launch full-file diff on the first ?full=1 request when diffFull is true", async () => {
+    const loaded = loadReviewTarget(dir, "stack-1..HEAD", undefined, false, FULL_FILE_CONTEXT);
+    const sentinel = loaded.diff;
+    const fullCtx: ServerContext = {
+      ...loaded,
+      cwd: dir,
+      assets: { read: () => null },
+      productRoot: dir,
+      served: false,
+      diffFull: true,
+      diffGeneration: 0,
+      host: "cli",
+    };
+
+    const first = handleGetDiff(fullCtx, new URL("http://127.0.0.1/api/diff?full=1"));
+    expect(first.status).toBe(200);
+    expect(fullCtx.served).toBe(true);
+    expect(fullCtx.diff).toBe(sentinel);
+    expect(fullCtx.diffGeneration).toBe(0);
+
+    // when the first request asks for hunk mode instead, git diff re-runs and updates diffFull
+    const hunkCtx: ServerContext = {
+      ...loaded,
+      cwd: dir,
+      assets: { read: () => null },
+      productRoot: dir,
+      served: false,
+      diffFull: true,
+      diffGeneration: 0,
+      host: "cli",
+    };
+    const hunkRes = handleGetDiff(hunkCtx, new URL("http://127.0.0.1/api/diff"));
+    const hunkDiff = (await hunkRes.json()) as DiffResult;
+    expect(hunkCtx.diffFull).toBe(false);
+    expect(hunkCtx.diffGeneration).toBe(1);
+    expect(hunkDiff.files[0]!.hunks[0]!.lines.length).toBeLessThan(30);
   });
 });

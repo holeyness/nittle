@@ -1,5 +1,4 @@
 <script lang="ts">
-  import MessageSquarePlus from "@lucide/svelte/icons/message-square-plus";
   import type { DiffFile, DiffLine, CommentTag } from "$types";
   import { getAppState } from "$lib/state/context";
   import { addDraftKey } from "$lib/state/draftKeys";
@@ -82,7 +81,7 @@
                 title="Comment — drag or shift-click to select a range"
                 aria-label="Comment on line {a.line}"
                 onmousedown={(e) => startSelect(e, ui, file.path, a.side, a.line)}
-              ><MessageSquarePlus size={13} /></button>
+              ></button>
             {/if}
           </td>
           <td class="lineno" class:sel={a} onmousedown={a ? (e) => startSelect(e, ui, file.path, a.side, a.line) : undefined}>{line.oldLine ?? ""}</td>

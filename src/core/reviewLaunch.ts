@@ -7,6 +7,7 @@ import { createServer, type ServerContext } from "../server/router";
 import { resolveClientAssets } from "./standalone";
 import { createReviewRecord, readReviewRecord, updateReviewRecord } from "./reviewRecords";
 import { loadReviewTarget } from "./reviewTarget";
+import { FULL_FILE_CONTEXT } from "../utils/git";
 import { createPresence } from "../server/presence";
 import { createLspPool } from "./lsp/launchPool";
 import type { LspPool } from "./lsp/pool";
@@ -50,7 +51,7 @@ export function launchReview(input: ReviewLaunchInput): ReviewLaunch {
   if (input.reviewId && !existing) throw new Error("review record not found");
   const cwd = resolve(existing?.target.cwd ?? input.cwd);
   const spec = existing?.target.spec ?? input.spec;
-  const loaded = loadReviewTarget(cwd, spec, input.scope, false);
+  const loaded = loadReviewTarget(cwd, spec, input.scope, false, FULL_FILE_CONTEXT);
   if (input.pr) {
     loaded.meta = { ...(loaded.meta ?? { repo: "", mode: "branch", source: input.pr.headRef, target: input.pr.baseRef }), pr: input.pr };
     loaded.diff = { ...loaded.diff, ref: input.refLabelOverride ?? loaded.diff.ref, meta: loaded.meta };
@@ -75,6 +76,7 @@ export function launchReview(input: ReviewLaunchInput): ReviewLaunch {
     assets,
     productRoot: input.productRoot,
     served: false,
+    diffFull: true,
     activeSpec: storedSpec,
     historyTipRef: loaded.newRef,
     historyBaseRef: loaded.meta?.target ?? null,
